@@ -101,8 +101,8 @@ def percent_param(*args, **kwargs):
 
 
 class _AttrsMeta(type):
-    def __new__(mcs, name, bases, dct):
-        new_class = super(_AttrsMeta, mcs).__new__(mcs, name, bases, dct)
+    def __new__(cls, name, bases, dct):
+        new_class = super(_AttrsMeta, cls).__new__(cls, name, bases, dct)
         return attr.s(new_class)
 
 
@@ -142,7 +142,7 @@ class TaskParameters(object):
         """
         for key, value in source_dict.items():
             if not hasattr(self, key):
-                raise ValueError("Unknown key {} in {} object".format(key, type(self).__name__))
+                raise ValueError(f"Unknown key {key} in {type(self).__name__} object")
 
             setattr(self, key, value)
 

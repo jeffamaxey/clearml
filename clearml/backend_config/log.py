@@ -9,7 +9,7 @@ def logger(path=None):
     if path:
         p = Path(path)
         module = (p.parent if p.stem.startswith('_') else p).stem
-        name = "clearml.%s" % module
+        name = f"clearml.{module}"
     return logging.getLogger(name)
 
 

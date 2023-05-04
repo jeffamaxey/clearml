@@ -68,9 +68,9 @@ class APIError(Exception):
             return None
 
     def __str__(self):
-        message = "{}: ".format(type(self).__name__)
+        message = f"{type(self).__name__}: "
         if self.extra_info:
-            message += "{}: ".format(self.extra_info)
+            message += f"{self.extra_info}: "
         if not self.meta:
             message += "no meta available"
             return message
@@ -158,9 +158,7 @@ class Response(object):
         self.response = response
 
     def __getattr__(self, attr):
-        if self.response is None:
-            return None
-        return getattr(self.response, attr)
+        return None if self.response is None else getattr(self.response, attr)
 
     @property
     def meta(self):
@@ -224,7 +222,9 @@ class TableResponse(Response):
             return "" if result is None else result
 
         fields = fields or self.fields
-        return '\n'.join(str(dict((attr, getter(item, attr)) for attr in fields)) for item in self)
+        return '\n'.join(
+            str({attr: getter(item, attr) for attr in fields}) for item in self
+        )
 
     def display(self, fields=None):
         print(self._format_table(fields=fields))
@@ -349,12 +349,12 @@ class Entity(object):
         """
         Display entity type, ID, and - if available - name.
         """
-        parts = (type(self).__name__, ": ", "id={}".format(self.data.id))
+        parts = type(self).__name__, ": ", f"id={self.data.id}"
         try:
-            parts += (", ", 'name="{}"'.format(self.data.name))
+            parts += (", ", f'name="{self.data.name}"')
         except AttributeError:
             pass
-        return "<{}>".format("".join(parts))
+        return f'<{"".join(parts)}>'
 
 
 def wrap_request_class(cls):

@@ -102,7 +102,7 @@ class S3BucketConfigurations(BaseBucketConfigurations):
         default_token="",
     ):
         super(S3BucketConfigurations, self).__init__()
-        self._buckets = buckets if buckets else list()
+        self._buckets = buckets if buckets else []
         self._default_key = default_key
         self._default_secret = default_secret
         self._default_token = default_token
@@ -240,7 +240,7 @@ class GSBucketConfig(object):
     def update(self, **kwargs):
         for item in kwargs:
             if not hasattr(self, item):
-                warnings.warn("Unexpected argument {} for update. Ignored".format(item))
+                warnings.warn(f"Unexpected argument {item} for update. Ignored")
             else:
                 setattr(self, item, kwargs[item])
 
@@ -358,7 +358,7 @@ class AzureContainerConfigurations(object):
         if configuration is None:
             return cls(default_container_configs)
 
-        containers = configuration.get("containers", list())
+        containers = configuration.get("containers", [])
         container_configs = [AzureContainerConfig(**entry) for entry in containers] + default_container_configs
 
         return cls(container_configs)
@@ -374,10 +374,7 @@ class AzureContainerConfigurations(object):
 
         if not f.path.segments:
             raise ValueError(
-                "URI {} is missing a container name (expected "
-                "[https/azure]://<account-name>.../<container-name>)".format(
-                    uri
-                )
+                f"URI {uri} is missing a container name (expected [https/azure]://<account-name>.../<container-name>)"
             )
 
         container = f.path.segments[0]

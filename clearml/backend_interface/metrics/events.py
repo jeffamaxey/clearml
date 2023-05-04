@@ -127,9 +127,7 @@ class MetricsEventAdapter(object):
             cls._report_nan_warning_iteration += 1
             if cls._report_nan_warning_iteration >= cls.report_nan_warning_period:
                 LoggerRoot.get_base_logger().info(
-                    "NaN value encountered. Reporting it as '{}'. Use clearml.Logger.set_reporting_nan_value to assign another value".format(
-                        cls.default_nan_value
-                    )
+                    f"NaN value encountered. Reporting it as '{cls.default_nan_value}'. Use clearml.Logger.set_reporting_nan_value to assign another value"
                 )
                 cls._report_nan_warning_iteration = 0
             return cls.default_nan_value
@@ -137,9 +135,7 @@ class MetricsEventAdapter(object):
             cls._report_inf_warning_iteration += 1
             if cls._report_inf_warning_iteration >= cls.report_inf_warning_period:
                 LoggerRoot.get_base_logger().info(
-                    "inf value encountered. Reporting it as '{}'. Use clearml.Logger.set_reporting_inf_value to assign another value".format(
-                        cls.default_inf_value
-                    )
+                    f"inf value encountered. Reporting it as '{cls.default_inf_value}'. Use clearml.Logger.set_reporting_inf_value to assign another value"
                 )
                 cls._report_inf_warning_iteration = 0
             return cls.default_inf_value
@@ -274,10 +270,10 @@ class UploadEvent(MetricsEventAdapter):
 
         self._filename = self._override_filename
         if not self._filename:
-            self._filename = '{}_{}'.format(self._metric, self._variant)
+            self._filename = f'{self._metric}_{self._variant}'
             cnt = self._count if self.file_history_size < 1 else (self._count % self.file_history_size)
             self._filename += '_{:05x}{:03d}'.format(force_pid_suffix, cnt) \
-                if force_pid_suffix else '_{:08d}'.format(cnt)
+                    if force_pid_suffix else '_{:08d}'.format(cnt)
 
         # make sure we have to '/' in the filename because it might access other folders,
         # and we don't want that to occur
@@ -288,10 +284,10 @@ class UploadEvent(MetricsEventAdapter):
         filename_ext = self._override_filename_ext
         if filename_ext is None:
             filename_ext = str(self._format).lower() if self._image_data is not None else \
-                '.' + '.'.join(pathlib2.Path(self._local_image_path).parts[-1].split('.')[1:])
+                    '.' + '.'.join(pathlib2.Path(self._local_image_path).parts[-1].split('.')[1:])
         # always add file extension to the uploaded target file
         if filename_ext and filename_ext[0] != '.':
-            filename_ext = '.' + filename_ext
+            filename_ext = f'.{filename_ext}'
         self._upload_filename = pathlib2.Path(self._filename).as_posix()
         if self._filename.rpartition(".")[2] != filename_ext.rpartition(".")[2]:
             self._upload_filename += filename_ext
@@ -300,7 +296,7 @@ class UploadEvent(MetricsEventAdapter):
     def _get_metric_count(cls, metric, variant, next=True):
         """ Returns the next count number for the given metric/variant (rotates every few calls) """
         counters = cls._metric_counters
-        key = '%s_%s' % (metric, variant)
+        key = f'{metric}_{variant}'
         try:
             cls._metric_counters_lock.acquire()
             value = counters.get(key, -1)
@@ -371,7 +367,8 @@ class UploadEvent(MetricsEventAdapter):
 
             if output is None:
                 LoggerRoot.get_base_logger().warning(
-                    'Skipping upload, could not find object file \'{}\''.format(self._local_image_path))
+                    f"Skipping upload, could not find object file \'{self._local_image_path}\'"
+                )
                 return None
 
         return self.FileEntry(
@@ -391,7 +388,7 @@ class UploadEvent(MetricsEventAdapter):
                 return folder_path
             parts = folder_path.split('.')
             if len(parts) > 1:
-                prefix = hashlib.md5(str('.'.join(parts[:-1])).encode('utf-8')).hexdigest()
+                prefix = hashlib.md5('.'.join(parts[:-1]).encode('utf-8')).hexdigest()
                 new_path = '{}.{}'.format(prefix, parts[-1])
                 if len(new_path) <= 250:
                     return new_path
@@ -410,7 +407,7 @@ class UploadEvent(MetricsEventAdapter):
         url = '/'.join(x.strip('/') for x in (e_storage_uri, key))
         # make sure we preserve local path root
         if e_storage_uri.startswith('/'):
-            url = '/' + url
+            url = f'/{url}'
 
         if quote_uri:
             url = quote_url(url)

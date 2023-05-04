@@ -66,7 +66,7 @@ class _TrainsBandsterWorker(Worker):
         # noinspection PyProtectedMember
         self.optimizer._current_jobs.append(self._current_job)
         if not self._current_job.launch(self.queue_name):
-            return dict()
+            return {}
         iteration_value = None
         is_pending = True
 
@@ -104,7 +104,7 @@ class _TrainsBandsterWorker(Worker):
             # can be used for any user-defined information - also mandatory
             'info': self._current_job.task_id()
         }
-        print('TrainsBandsterWorker result {}, iteration {}'.format(result, iteration_value))
+        print(f'TrainsBandsterWorker result {result}, iteration {iteration_value}')
         # noinspection PyProtectedMember
         self.optimizer._current_jobs.remove(self._current_job)
         return result
@@ -189,7 +189,9 @@ class OptimizerBOHB(SearchStrategy, RandomSeed):
         self._min_iteration_per_job = min_iteration_per_job
         verified_bohb_kwargs = ['eta', 'min_budget', 'max_budget', 'min_points_in_model', 'top_n_percent',
                                 'num_samples', 'random_fraction', 'bandwidth_factor', 'min_bandwidth']
-        self._bohb_kwargs = dict((k, v) for k, v in bohb_kwargs.items() if k in verified_bohb_kwargs)
+        self._bohb_kwargs = {
+            k: v for k, v in bohb_kwargs.items() if k in verified_bohb_kwargs
+        }
         self._param_iterator = None
         self._namespace = None
         self._bohb = None
@@ -282,7 +284,7 @@ class OptimizerBOHB(SearchStrategy, RandomSeed):
 
         """
         # Step 1: Start a NameServer
-        fake_run_id = 'OptimizerBOHB_{}'.format(time())
+        fake_run_id = f'OptimizerBOHB_{time()}'
         # default port is 9090, we must have one, this is how BOHB workers communicate (even locally)
         self._namespace = hpns.NameServer(run_id=fake_run_id, host='127.0.0.1', port=self._nameserver_port)
         self._namespace.start()
@@ -342,10 +344,16 @@ class OptimizerBOHB(SearchStrategy, RandomSeed):
 
         # Step 6: Print Analysis
         print('Best found configuration:', id2config[incumbent]['config'])
-        print('A total of {} unique configurations where sampled.'.format(len(id2config.keys())))
-        print('A total of {} runs where executed.'.format(len(self._res.get_all_runs())))
-        print('Total budget corresponds to {:.1f} full function evaluations.'.format(
-            sum([r.budget for r in all_runs]) / self._bohb_kwargs.get('max_budget', 1.0)))
+        print(
+            f'A total of {len(id2config.keys())} unique configurations where sampled.'
+        )
+        print(f'A total of {len(self._res.get_all_runs())} runs where executed.')
+        print(
+            'Total budget corresponds to {:.1f} full function evaluations.'.format(
+                sum(r.budget for r in all_runs)
+                / self._bohb_kwargs.get('max_budget', 1.0)
+            )
+        )
         print('The run took {:.1f} seconds to complete.'.format(
             all_runs[-1].time_stamps['finished'] - all_runs[0].time_stamps['started']))
 
@@ -362,7 +370,9 @@ class OptimizerBOHB(SearchStrategy, RandomSeed):
             elif isinstance(p, DiscreteParameterRange):
                 hp = CSH.CategoricalHyperparameter(p.name, choices=p.values)
             else:
-                raise ValueError("HyperParameter type {} not supported yet with OptimizerBOHB".format(type(p)))
+                raise ValueError(
+                    f"HyperParameter type {type(p)} not supported yet with OptimizerBOHB"
+                )
             cs.add_hyperparameter(hp)
 
         return cs

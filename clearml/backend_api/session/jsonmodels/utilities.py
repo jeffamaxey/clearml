@@ -11,18 +11,15 @@ ECMA_TO_PYTHON_FLAGS = {
     'm': re.M,
 }
 
-PYTHON_TO_ECMA_FLAGS = dict(
-    (value, key) for key, value in ECMA_TO_PYTHON_FLAGS.items()
-)
+PYTHON_TO_ECMA_FLAGS = {
+    value: key for key, value in ECMA_TO_PYTHON_FLAGS.items()
+}
 
 PythonRegex = namedtuple('PythonRegex', ['regex', 'flags'])
 
 
 def _normalize_string_type(value):
-    if isinstance(value, six.string_types):
-        return six.text_type(value)
-    else:
-        return value
+    return six.text_type(value) if isinstance(value, six.string_types) else value
 
 
 def _compare_dicts(one, two):
@@ -107,9 +104,7 @@ def is_ecma_regex(regex):
     parts.append('')
 
     raw_regex = '/'.join(parts)
-    if raw_regex.startswith('/') and raw_regex.endswith('/'):
-        return True
-    return False
+    return bool(raw_regex.startswith('/') and raw_regex.endswith('/'))
 
 
 def convert_ecma_regex_to_python(value):
@@ -131,7 +126,7 @@ def convert_ecma_regex_to_python(value):
     try:
         result_flags = [ECMA_TO_PYTHON_FLAGS[f] for f in flags]
     except KeyError:
-        raise ValueError('Wrong flags "{}".'.format(flags))
+        raise ValueError(f'Wrong flags "{flags}".')
 
     return PythonRegex('/'.join(parts[1:]), result_flags)
 

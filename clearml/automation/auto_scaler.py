@@ -228,13 +228,12 @@ class AutoScaler(object):
             # update spun_workers (remove instances that are fully registered)
             for worker in all_workers:
                 if worker.id not in previous_workers:
-                    if not spun_workers.pop(worker.id, None):
-                        if worker.id not in unknown_workers:
-                            self.logger.info('Removed unknown worker from spun_workers: %s', worker.id)
-                            unknown_workers.append(worker.id)
-                    else:
+                    if spun_workers.pop(worker.id, None):
                         previous_workers.add(worker.id)
 
+                    elif worker.id not in unknown_workers:
+                        self.logger.info('Removed unknown worker from spun_workers: %s', worker.id)
+                        unknown_workers.append(worker.id)
             for worker_id in self.stale_workers(spun_workers):
                 out = spun_workers.pop(worker_id, None)
                 if out is None:
@@ -308,7 +307,7 @@ class AutoScaler(object):
                     worker_prefix = self.gen_worker_prefix(resource, resource_conf)
                     instance_id = self.driver.spin_up_worker(resource_conf, worker_prefix, queue, task_id=task_id)
                     self.monitor_startup(instance_id)
-                    worker_id = '{}:{}'.format(worker_prefix, instance_id)
+                    worker_id = f'{worker_prefix}:{instance_id}'
                     self.logger.info('New instance ID: %s', instance_id)
                     spun_workers[worker_id] = (resource, time())
                     up_machines[resource] += 1
@@ -367,8 +366,7 @@ class AutoScaler(object):
 
     @state.setter
     def state(self, value):
-        prev = getattr(self, '_state', None)
-        if prev:
+        if prev := getattr(self, '_state', None):
             self.logger.info('state change: %s -> %s', prev, value)
         else:
             self.logger.info('initial state: %s', value)
@@ -388,13 +386,12 @@ class AutoScaler(object):
         while time() - start <= self.max_spin_up_time_min * MINUTE:
             self.logger.info('getting startup logs for %r', instance_id)
             data = self.driver.console_log(instance_id)
-            lines = data.splitlines()
-            if not lines:
-                self.logger.info('not startup logs for %r', instance_id)
-            else:
+            if lines := data.splitlines():
                 last_lnum, lines = latest_lines(lines, last_lnum)
                 for line in lines:
                     self.logger.info('%r STARTUP LOG: %s', instance_id, line)
+            else:
+                self.logger.info('not startup logs for %r', instance_id)
             sleep(MINUTE)
 
 

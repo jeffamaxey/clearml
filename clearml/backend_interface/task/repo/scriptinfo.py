@@ -54,7 +54,9 @@ class ScriptRequirements(object):
                         reqs[k] = guess[k]
             return self.create_requirements_txt(reqs, local_pks, detailed=detailed_req_report)
         except Exception as ex:
-            self._get_logger().warning("Failed auto-generating package requirements: {}".format(ex))
+            self._get_logger().warning(
+                f"Failed auto-generating package requirements: {ex}"
+            )
             return '', ''
 
     @staticmethod
@@ -313,7 +315,7 @@ class _JupyterObserver(object):
             from nbconvert.exporters.script import ScriptExporter
             _script_exporter = ScriptExporter()
         except Exception as ex:
-            cls._get_logger().warning('Could not read Jupyter Notebook: {}'.format(ex))
+            cls._get_logger().warning(f'Could not read Jupyter Notebook: {ex}')
             return
         # load pigar
         # noinspection PyBroadException
@@ -385,29 +387,28 @@ class _JupyterObserver(object):
                     # check if notebook changed
                     if last_update_ts is not None and notebook.stat().st_mtime - last_update_ts <= 0:
                         continue
-                    last_update_ts = notebook.stat().st_mtime
-                else:
-                    # serialize notebook to a temp file
-                    if cls._jupyter_history_logger:
-                        script_code, current_cell = cls._jupyter_history_logger.history_to_str()
                     else:
+                        last_update_ts = notebook.stat().st_mtime
+                elif cls._jupyter_history_logger:
+                    script_code, current_cell = cls._jupyter_history_logger.history_to_str()
+                else:
+                        # noinspection PyBroadException
+                    try:
                         # noinspection PyBroadException
                         try:
-                            # noinspection PyBroadException
-                            try:
-                                os.unlink(local_jupyter_filename)
-                            except Exception:
-                                pass
-                            get_ipython().run_line_magic('history', '-t -f {}'.format(local_jupyter_filename))
-                            with open(local_jupyter_filename, 'r') as f:
-                                script_code = f.read()
-                            # load the modules
-                            from ....utilities.pigar.modules import ImportedModules
-                            fmodules = ImportedModules()
-                            for nm in set([str(m).split('.')[0] for m in sys.modules]):
-                                fmodules.add(nm, 'notebook', 0)
+                            os.unlink(local_jupyter_filename)
                         except Exception:
-                            continue
+                            pass
+                        get_ipython().run_line_magic('history', f'-t -f {local_jupyter_filename}')
+                        with open(local_jupyter_filename, 'r') as f:
+                            script_code = f.read()
+                        # load the modules
+                        from ....utilities.pigar.modules import ImportedModules
+                        fmodules = ImportedModules()
+                        for nm in {str(m).split('.')[0] for m in sys.modules}:
+                            fmodules.add(nm, 'notebook', 0)
+                    except Exception:
+                        continue
 
                 # get notebook python script
                 if script_code is None and local_jupyter_filename:
@@ -425,7 +426,7 @@ class _JupyterObserver(object):
                         try:
                             from nbconvert.exporters import HTMLExporter  # noqa
                             html, _ = HTMLExporter().from_filename(filename=local_jupyter_filename)
-                            local_html = Path(gettempdir()) / 'notebook_{}.html'.format(task.id)
+                            local_html = Path(gettempdir()) / f'notebook_{task.id}.html'
                             with open(local_html.as_posix(), 'wt', encoding="utf-8") as f:
                                 f.write(html)
                             task.upload_artifact(
@@ -546,9 +547,16 @@ class ScriptInfo(object):
             except Exception:
                 pass
 
-        if not (sys.argv[0].endswith(os.path.sep + 'ipykernel_launcher.py') or
-                sys.argv[0].endswith(os.path.join(os.path.sep, 'ipykernel', '__main__.py'))) \
-                or len(sys.argv) < 3 or not sys.argv[2].endswith('.json'):
+        if (
+            not (
+                sys.argv[0].endswith(f'{os.path.sep}ipykernel_launcher.py')
+                or sys.argv[0].endswith(
+                    os.path.join(os.path.sep, 'ipykernel', '__main__.py')
+                )
+            )
+            or len(sys.argv) < 3
+            or not sys.argv[2].endswith('.json')
+        ):
             return None
 
         server_info = None
@@ -603,13 +611,15 @@ class ScriptInfo(object):
                 cookies = {'_xsrf': r.cookies.get('_xsrf', '')}
                 r = requests.post(server_info['url'] + 'login?next', cookies=cookies,
                                   data={'_xsrf': cookies['_xsrf'], 'password': password})
-                cookies.update(r.cookies)
+                cookies |= r.cookies
 
             auth_token = server_info.get('token') or os.getenv('JUPYTERHUB_API_TOKEN') or ''
             try:
                 r = requests.get(
-                    url=server_info['url'] + 'api/sessions', cookies=cookies,
-                    headers={'Authorization': 'token {}'.format(auth_token), })
+                    url=server_info['url'] + 'api/sessions',
+                    cookies=cookies,
+                    headers={'Authorization': f'token {auth_token}'},
+                )
             except requests.exceptions.SSLError:
                 # disable SSL check warning
                 from urllib3.exceptions import InsecureRequestWarning
@@ -617,8 +627,11 @@ class ScriptInfo(object):
                 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
                 # fire request
                 r = requests.get(
-                    url=server_info['url'] + 'api/sessions', cookies=cookies,
-                    headers={'Authorization': 'token {}'.format(auth_token), }, verify=False)
+                    url=server_info['url'] + 'api/sessions',
+                    cookies=cookies,
+                    headers={'Authorization': f'token {auth_token}'},
+                    verify=False,
+                )
                 # enable SSL check warning
                 import warnings
                 warnings.simplefilter('default', InsecureRequestWarning)
@@ -627,18 +640,16 @@ class ScriptInfo(object):
             try:
                 r.raise_for_status()
             except Exception as ex:
-                cls._get_logger().warning('Failed accessing the jupyter server{}: {}'.format(
-                    ' [password={}]'.format(password) if server_info.get('password') else '', ex))
+                cls._get_logger().warning(
+                    f"Failed accessing the jupyter server{f' [password={password}]' if server_info.get('password') else ''}: {ex}"
+                )
                 return os.path.join(os.getcwd(), 'error_notebook_not_found.py')
 
             notebooks = r.json()
 
-            cur_notebook = None
-            for n in notebooks:
-                if n['kernel']['id'] == current_kernel:
-                    cur_notebook = n
-                    break
-
+            cur_notebook = next(
+                (n for n in notebooks if n['kernel']['id'] == current_kernel), None
+            )
             notebook_path = cur_notebook['notebook'].get('path', '')
             notebook_name = cur_notebook['notebook'].get('name', '')
 
@@ -682,7 +693,9 @@ class ScriptInfo(object):
                         if entry_point_alternative.exists():
                             entry_point = entry_point_alternative
                     except Exception as ex:
-                        cls._get_logger().warning('Failed accessing jupyter notebook {}: {}'.format(notebook_path, ex))
+                        cls._get_logger().warning(
+                            f'Failed accessing jupyter notebook {notebook_path}: {ex}'
+                        )
 
                 # get local ipynb for observer
                 local_ipynb_file = entry_point.as_posix()
@@ -909,7 +922,7 @@ class ScriptInfo(object):
             pass
         except BaseException as ex:
             if log:
-                log.warning("Failed auto-detecting task repository: {}".format(ex))
+                log.warning(f"Failed auto-detecting task repository: {ex}")
         return ScriptInfoResult(), None
 
     @classmethod
@@ -939,7 +952,7 @@ class ScriptInfo(object):
                             # adjust path relative to working dir inside git repo
                             a = ' ' + os.path.relpath(
                                 a_abs, os.path.join(git_root, str(script_dict['working_dir'])))
-                    argvs += ' {}'.format(a)
+                    argvs += f' {a}'
 
                 # noinspection PyBroadException
                 try:
@@ -948,7 +961,7 @@ class ScriptInfo(object):
                     module_name = vars(sys.modules['__main__'])['__package__']
 
                 # update the script entry point to match the real argv and module call
-                script_dict['entry_point'] = '-m {}{}'.format(module_name, (' ' + argvs) if argvs else '')
+                script_dict['entry_point'] = f"-m {module_name}{f' {argvs}' if argvs else ''}"
         except Exception:
             pass
         return script_dict

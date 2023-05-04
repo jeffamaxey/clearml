@@ -15,14 +15,17 @@ class StdStreamPatch(object):
 
     @staticmethod
     def patch_std_streams(a_logger, connect_stdout=True, connect_stderr=True, load_config_defaults=True):
-        if (connect_stdout or connect_stderr) and not PrintPatchLogger.patched and \
-                (not running_remotely() or DEBUG_SIMULATE_REMOTE_TASK.get()):
+        if not connect_stdout and not connect_stderr:
+            return
+        if not PrintPatchLogger.patched and (
+            not running_remotely() or DEBUG_SIMULATE_REMOTE_TASK.get()
+        ):
             StdStreamPatch._stdout_proxy = PrintPatchLogger(
                 sys.stdout, a_logger, level=logging.INFO, load_config_defaults=load_config_defaults) \
-                if connect_stdout else None
+                    if connect_stdout else None
             StdStreamPatch._stderr_proxy = PrintPatchLogger(
                 sys.stderr, a_logger, level=logging.ERROR, load_config_defaults=load_config_defaults) \
-                if connect_stderr else None
+                    if connect_stderr else None
 
             if StdStreamPatch._stdout_proxy:
                 # noinspection PyBroadException
@@ -70,9 +73,12 @@ class StdStreamPatch(object):
                 register_stderr = None
                 register_stdout = None
                 for k, v in logger._handlers.items():  # noqa
-                    if connect_stderr and v._name == '<stderr>':  # noqa
-                        register_stderr = k
-                    elif connect_stdout and v._name == '<stdout>':  # noqa
+                    if (
+                        connect_stderr
+                        and v._name == '<stderr>'
+                        or connect_stdout
+                        and v._name == '<stdout>'
+                    ):  # noqa
                         register_stderr = k
                 if register_stderr is not None:
                     logger.remove(register_stderr)
@@ -83,7 +89,7 @@ class StdStreamPatch(object):
             except Exception:
                 pass
 
-        elif (connect_stdout or connect_stderr) and not running_remotely():
+        elif not running_remotely():
             if StdStreamPatch._stdout_proxy and connect_stdout:
                 StdStreamPatch._stdout_proxy.connect(a_logger)
             if StdStreamPatch._stderr_proxy and connect_stderr:
@@ -244,11 +250,10 @@ class PrintPatchLogger(object):
                     except Exception:
                         # what can we do, nothing
                         pass
+        elif hasattr(self._terminal, '_original_write'):
+            self._terminal._original_write(message)  # noqa
         else:
-            if hasattr(self._terminal, '_original_write'):
-                self._terminal._original_write(message)  # noqa
-            else:
-                self._terminal.write(message)
+            self._terminal.write(message)
 
     def connect(self, logger):
         # refresh if needed

@@ -89,18 +89,19 @@ class Detector(object):
 
         except (CalledProcessError, UnicodeDecodeError) as ex:
             if not name.endswith(self._fallback):
-                fallback_command = attr.asdict(commands or self._get_commands()).get(name + self._fallback)
-                if fallback_command:
+                if fallback_command := attr.asdict(
+                    commands or self._get_commands()
+                ).get(name + self._fallback):
                     try:
                         return get_command_output(fallback_command, path, strip=strip)
                     except (CalledProcessError, UnicodeDecodeError):
                         pass
-            self._get_logger().warning("Can't get {} information for {} repo in {}".format(name, self.type_name, path))
+            self._get_logger().warning(
+                f"Can't get {name} information for {self.type_name} repo in {path}"
+            )
             # full details only in debug
             self._get_logger().debug(
-                "Can't get {} information for {} repo in {}: {}".format(
-                    name, self.type_name, path, str(ex)
-                )
+                f"Can't get {name} information for {self.type_name} repo in {path}: {str(ex)}"
             )
             return ""
 
@@ -125,9 +126,13 @@ class Detector(object):
 
         info = Result(
             **{
-                name: self._get_command_output(path, name, command, commands=commands, strip=bool(name != 'diff'))
+                name: self._get_command_output(
+                    path, name, command, commands=commands, strip=name != 'diff'
+                )
                 for name, command in attr.asdict(commands).items()
-                if command and not name.endswith(self._fallback) and not name.endswith(self._remote)
+                if command
+                and not name.endswith(self._fallback)
+                and not name.endswith(self._remote)
             }
         )
 
@@ -182,7 +187,7 @@ class Detector(object):
                     == 0
                 )
         except CalledProcessError:
-            self._get_logger().warning("Can't get {} status".format(self.type_name))
+            self._get_logger().warning(f"Can't get {self.type_name} status")
         except (OSError, EnvironmentError, IOError):
             # File not found or can't be executed
             pass
@@ -282,7 +287,7 @@ class GitDetector(Detector):
 
 class EnvDetector(Detector):
     def __init__(self, type_name):
-        super(EnvDetector, self).__init__(type_name, "{} environment".format(type_name))
+        super(EnvDetector, self).__init__(type_name, f"{type_name} environment")
 
     def _is_repo_type(self, script_path):
         return VCS_REPO_TYPE.get().lower() == self.type_name and bool(

@@ -57,8 +57,11 @@ class DataModel(object):
         if props is None:
             props = {}
             for c in cls.__mro__:
-                props.update({k: getattr(v, 'name', k) for k, v in vars(c).items()
-                              if isinstance(v, property)})
+                props |= {
+                    k: getattr(v, 'name', k)
+                    for k, v in vars(c).items()
+                    if isinstance(v, property)
+                }
             cls._data_props_list = props
         return props.copy()
 
@@ -113,16 +116,14 @@ class DataModel(object):
     def assert_isinstance(value, field_name, expected, is_array=False):
         if not is_array:
             if not isinstance(value, expected):
-                raise TypeError("Expected %s of type %s, got %s" % (field_name, expected, type(value).__name__))
+                raise TypeError(
+                    f"Expected {field_name} of type {expected}, got {type(value).__name__}"
+                )
             return
 
         if not all(isinstance(x, expected) for x in value):
             raise TypeError(
-                "Expected %s of type list[%s], got %s" % (
-                    field_name,
-                    expected,
-                    ", ".join(set(type(x).__name__ for x in value)),
-                )
+                f'Expected {field_name} of type list[{expected}], got {", ".join({type(x).__name__ for x in value})}'
             )
 
     @staticmethod
@@ -139,7 +140,7 @@ class DataModel(object):
         allowed_keys = cls._get_data_props().values()
         invalid_keys = set(dct).difference(allowed_keys)
         if strict and invalid_keys:
-            raise ValueError("Invalid keys %s" % tuple(invalid_keys))
+            raise ValueError(f"Invalid keys {tuple(invalid_keys)}")
         return cls(**{cls.normalize_key(key): value for key, value in dct.items() if key not in invalid_keys})
 
 

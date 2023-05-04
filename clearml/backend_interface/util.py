@@ -33,7 +33,7 @@ def make_message(s, **kwargs):
         # noinspection PyBroadException
         try:
             import os
-            user = '{}'.format(os.getuid())
+            user = f'{os.getuid()}'
         except Exception:
             user = 'unknown'
 
@@ -43,24 +43,34 @@ def make_message(s, **kwargs):
     except Exception:
         host = 'localhost'
 
-    args = dict(
-        user=user,
-        host=host,
-        time=datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    args = (
+        dict(
+            user=user,
+            host=host,
+            time=datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+        )
+        | kwargs
     )
-    args.update(kwargs)
     return s % args
 
 
 def get_existing_project(session, project_name):
     """Return either the project ID if it exists, an empty string if it doesn't or None if backend request failed."""
-    res = session.send(projects.GetAllRequest(
-        name=exact_match_regex(project_name), only_fields=['id'], search_hidden=True, _allow_extra_fields_=True))
-    if not res:
+    if res := session.send(
+        projects.GetAllRequest(
+            name=exact_match_regex(project_name),
+            only_fields=['id'],
+            search_hidden=True,
+            _allow_extra_fields_=True,
+        )
+    ):
+        return (
+            res.response.projects[0].id
+            if res.response and res.response.projects
+            else ""
+        )
+    else:
         return None
-    if res.response and res.response.projects:
-        return res.response.projects[0].id
-    return ""
 
 
 def get_or_create_project(session, project_name, description=None, system_tags=None, project_id=None):
@@ -107,7 +117,8 @@ def get_queue_id(session, queue):
     if res and res.response and res.response.queues:
         if len(res.response.queues) > 1:
             LoggerRoot.get_base_logger().info(
-                "Multiple queues with name={}, selecting queue id={}".format(queue, res.response.queues[0].id))
+                f"Multiple queues with name={queue}, selecting queue id={res.response.queues[0].id}"
+            )
         return res.response.queues[0].id
 
     return None
@@ -158,8 +169,10 @@ def get_single_result(entity, query, results, log=None, show_results=1, raise_on
 
 def at_least_one(_exception_cls=Exception, _check_none=False, **kwargs):
     actual = [k for k, v in kwargs.items() if (v is not None if _check_none else v)]
-    if len(actual) < 1:
-        raise _exception_cls('At least one of (%s) is required' % ', '.join(kwargs.keys()))
+    if not actual:
+        raise _exception_cls(
+            f"At least one of ({', '.join(kwargs.keys())}) is required"
+        )
 
 
 def mutually_exclusive(_exception_cls=Exception, _require_at_least_one=True, _check_none=False, **kwargs):
@@ -168,27 +181,25 @@ def mutually_exclusive(_exception_cls=Exception, _require_at_least_one=True, _ch
     if _require_at_least_one:
         at_least_one(_exception_cls=_exception_cls, _check_none=_check_none, **kwargs)
     if len(actual) > 1:
-        raise _exception_cls('Only one of (%s) is allowed' % ', '.join(kwargs.keys()))
+        raise _exception_cls(f"Only one of ({', '.join(kwargs.keys())}) is allowed")
 
 
 def validate_dict(obj, key_types, value_types, desc=''):
     if not isinstance(obj, dict):
-        raise ValueError('%sexpected a dictionary' % ('%s: ' % desc if desc else ''))
+        raise ValueError(f"{f'{desc}: ' if desc else ''}expected a dictionary")
     if not all(isinstance(x, key_types) for x in obj.keys()):
-        raise ValueError('%skeys must all be strings' % ('%s ' % desc if desc else ''))
+        raise ValueError(f"{f'{desc} ' if desc else ''}keys must all be strings")
     if not all(isinstance(x, value_types) for x in obj.values()):
-        raise ValueError('%svalues must all be integers' % ('%s ' % desc if desc else ''))
+        raise ValueError(f"{f'{desc} ' if desc else ''}values must all be integers")
 
 
 def exact_match_regex(name):
     """ Convert string to a regex representing an exact match """
-    return '^%s$' % re.escape(name or '')
+    return f"^{re.escape(name or '')}$"
 
 
 def datetime_to_isoformat(o):
-    if isinstance(o, datetime):
-        return o.isoformat()
-    return None
+    return o.isoformat() if isinstance(o, datetime) else None
 
 
 def datetime_from_isoformat(o):

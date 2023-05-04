@@ -110,8 +110,7 @@ class BackgroundLogService(BackgroundMonitor):
         while self._queue and not self._queue.empty():
             # noinspection PyBroadException
             try:
-                request = self._queue.get(block=False)
-                if request:
+                if request := self._queue.get(block=False):
                     buffer.append(request)
             except Exception:
                 break
@@ -280,9 +279,10 @@ class TaskHandler(BufferingHandler):
                         timeout = 1. if _background_log.empty() else self.__wait_for_flush_timeout
                         _background_log.wait(timeout=timeout)
                         if not _background_log.empty():
-                            self._log_stderr('Flush timeout {}s exceeded, dropping last {} lines'.format(
-                                timeout, self._background_log_size))
-                        # self._log_stderr('Closing {} wait done'.format(os.getpid()))
+                            self._log_stderr(
+                                f'Flush timeout {timeout}s exceeded, dropping last {self._background_log_size} lines'
+                            )
+                                        # self._log_stderr('Closing {} wait done'.format(os.getpid()))
                     except Exception:
                         pass
             else:
@@ -315,7 +315,7 @@ class TaskHandler(BufferingHandler):
                 except StopIteration:
                     break
                 except Exception as ex:
-                    warning('Failed reporting log, line {} [{}]'.format(i, ex))
+                    warning(f'Failed reporting log, line {i} [{ex}]')
                 batch_requests = events.AddBatchRequest(
                     requests=[events.TaskLogEvent(task=task.id, **r) for r in list_requests])
                 if batch_requests.requests:

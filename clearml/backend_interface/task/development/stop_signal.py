@@ -57,7 +57,7 @@ class TaskStopSignal(object):
                     return TaskStopReason.reset
 
                 self.task.log.warning(
-                    "Task {} was reset! if state is consistent we shall terminate.".format(self.task.id),
+                    f"Task {self.task.id} was reset! if state is consistent we shall terminate."
                 )
             else:
                 self._task_reset_state_counter = 0

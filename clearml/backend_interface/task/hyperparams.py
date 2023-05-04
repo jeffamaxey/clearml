@@ -42,11 +42,11 @@ class HyperParams(object):
                                 selector and not selector(item)
                             ):
                                 continue
-                            item = item if not projector else projector(item)
+                            item = projector(item) if projector else item
                             if return_obj:
                                 item = tasks.ParamsItem()
                             hyperparams[item.get("section")][item.get("name")] = (
-                                item if not projector else projector(item)
+                                projector(item) if projector else item
                             )
                         except Exception:
                             self.task.log.exception("Failed processing hyper-parameter")
@@ -117,7 +117,7 @@ class HyperParams(object):
         else:
             for i in iterables:
                 item = make_item(i)
-                props.update({item.name: item})
+                props[item.name] = item
 
         res = self.task.session.send(
             tasks.EditHyperParamsRequest(
@@ -178,9 +178,9 @@ class HyperParams(object):
                 yield value
             else:
                 self.task.log.info(
-                    "Converting unsafe hyper parameter name/section '{}' to '{}'".format(value, "_" + value)
+                    f"Converting unsafe hyper parameter name/section '{value}' to '_{value}'"
                 )
-                yield "_" + value
+                yield f"_{value}"
 
 
 UNSAFE_NAMES_2_10 = {

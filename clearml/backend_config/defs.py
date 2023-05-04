@@ -63,10 +63,10 @@ def get_active_config_file():
     f = LOCAL_CONFIG_FILE_OVERRIDE_VAR.get()
     if f and exists(expanduser(expandvars(f))):
         return f
-    for f in LOCAL_CONFIG_FILES:
-        if exists(expanduser(expandvars(f))):
-            return f
-    return None
+    return next(
+        (f for f in LOCAL_CONFIG_FILES if exists(expanduser(expandvars(f)))),
+        None,
+    )
 
 
 def get_config_file():

@@ -36,7 +36,7 @@ class BaseTrigger(BaseScheduleJob):
             'name': self.match_name or None,
             'project': [self.project] if self.project else None,
             'tags': ((self.tags or []) + (self.required_tags or [])) or None,
-            self._update_field: ">{}".format(ref_time.isoformat() if ref_time else self.last_update.isoformat())
+            self._update_field: f">{ref_time.isoformat() if ref_time else self.last_update.isoformat()}",
         }
 
     def verify(self):
@@ -44,14 +44,16 @@ class BaseTrigger(BaseScheduleJob):
         super(BaseTrigger, self).verify()
         if self.tags and (not isinstance(self.tags, (list, tuple)) or
                           not all(isinstance(s, str) for s in self.tags)):
-            raise ValueError("Tags must be a list of strings: {}".format(self.tags))
+            raise ValueError(f"Tags must be a list of strings: {self.tags}")
         if self.required_tags and (not isinstance(self.required_tags, (list, tuple)) or
                                    not all(isinstance(s, str) for s in self.required_tags)):
-            raise ValueError("Required tags must be a list of strings: {}".format(self.required_tags))
+            raise ValueError(
+                f"Required tags must be a list of strings: {self.required_tags}"
+            )
         if self.project and not isinstance(self.project, str):
-            raise ValueError("Project must be a string: {}".format(self.project))
+            raise ValueError(f"Project must be a string: {self.project}")
         if self.match_name and not isinstance(self.match_name, str):
-            raise ValueError("Match name must be a string: {}".format(self.match_name))
+            raise ValueError(f"Match name must be a string: {self.match_name}")
 
     def get_key(self):
         return getattr(self, '_key', None)
@@ -126,7 +128,7 @@ class TaskTrigger(BaseTrigger):
         if self.metrics and self.variant and self.threshold:
             metrics, title, series, values = ClearmlJob.get_metric_req_params(self.metrics, self.variant)
             sign_max = (self.value_sign or '').lower() in ('max', 'maximum')
-            filter_key = "last_metrics.{}.{}.{}".format(title, series, "max_value" if sign_max else "min_value")
+            filter_key = f'last_metrics.{title}.{series}.{"max_value" if sign_max else "min_value"}'
             filter_value = [self.threshold, None] if sign_max else [None, self.threshold]
             query.update({filter_key: filter_value})
         return query
@@ -135,14 +137,18 @@ class TaskTrigger(BaseTrigger):
         # type: () -> None
         super(TaskTrigger, self).verify()
         if (self.metrics or self.variant or self.threshold is not None) and \
-                not (self.metrics and self.variant and self.threshold is not None):
+                    not (self.metrics and self.variant and self.threshold is not None):
             raise ValueError("You must provide metric/variant/threshold")
         valid_status = [str(s) for s in Task.TaskStatusEnum]
-        if self.on_status and not all(s in valid_status for s in self.on_status):
-            raise ValueError("You on_status contains invalid status value: {}".format(self.on_status))
+        if self.on_status and any(s not in valid_status for s in self.on_status):
+            raise ValueError(
+                f"You on_status contains invalid status value: {self.on_status}"
+            )
         valid_signs = ['min', 'minimum', 'max', 'maximum']
         if self.value_sign and self.value_sign not in valid_signs:
-            raise ValueError("Invalid value_sign `{}`, valid options are: {}".format(self.value_sign, valid_signs))
+            raise ValueError(
+                f"Invalid value_sign `{self.value_sign}`, valid options are: {valid_signs}"
+            )
 
 
 @attrs
@@ -477,7 +483,7 @@ class TriggerScheduler(BaseScheduler):
                 if not objects:
                     continue
             except Exception as ex:
-                self._log("Exception occurred while checking trigger '{}' state: {}".format(trigger, ex))
+                self._log(f"Exception occurred while checking trigger '{trigger}' state: {ex}")
 
             executed |= bool(objects)
 
@@ -505,12 +511,11 @@ class TriggerScheduler(BaseScheduler):
                     k: trigger_id if v == job._task_param else v # noqa
                     for k, v in job.task_parameters.items()
                 }
-            task_job = self._launch_job_task(
+            if task_job := self._launch_job_task(
                 job,
                 task_parameters=task_parameters,
                 add_tags=job.add_tag or None,
-            )
-            if task_job:
+            ):
                 self._executed_triggers.append(
                     ExecutedTrigger(
                         name=job.name,
@@ -519,8 +524,9 @@ class TriggerScheduler(BaseScheduler):
                         trigger=str(job.__class__.__name__))
                 )
         if job.base_function:
-            thread_job = self._launch_job_function(job, func_args=(trigger_id, ))
-            if thread_job:
+            if thread_job := self._launch_job_function(
+                job, func_args=(trigger_id,)
+            ):
                 self._executed_triggers.append(
                     ExecutedTrigger(
                         name=job.name,
@@ -570,7 +576,7 @@ class TriggerScheduler(BaseScheduler):
         try:
             return self.__deserialize_triggers(json.loads(json_str), trigger_class, current_triggers)
         except Exception as ex:
-            self._log('Failed deserializing configuration: {}'.format(ex), level=logging.WARN)
+            self._log(f'Failed deserializing configuration: {ex}', level=logging.WARN)
             return current_triggers
 
     @staticmethod
@@ -641,9 +647,11 @@ class TriggerScheduler(BaseScheduler):
         if not self._task:
             return
 
-        task_link_template = self._task.get_output_log_web_page() \
-            .replace('/{}/'.format(self._task.project), '/{project}/') \
-            .replace('/{}/'.format(self._task.id), '/{task}/')
+        task_link_template = (
+            self._task.get_output_log_web_page()
+            .replace(f'/{self._task.project}/', '/{project}/')
+            .replace(f'/{self._task.id}/', '/{task}/')
+        )
 
         # plot the already executed Tasks
         executed_table = [['trigger', 'name', 'task id', 'started', 'finished']]
@@ -686,9 +694,11 @@ class TriggerScheduler(BaseScheduler):
         if not triggers:
             return
 
-        task_link_template = self._task.get_output_log_web_page() \
-            .replace('/{}/'.format(self._task.project), '/{project}/') \
-            .replace('/{}/'.format(self._task.id), '/{task}/')
+        task_link_template = (
+            self._task.get_output_log_web_page()
+            .replace(f'/{self._task.project}/', '/{project}/')
+            .replace(f'/{self._task.id}/', '/{task}/')
+        )
 
         columns = [k for k in BaseTrigger().__dict__.keys() if not k.startswith('_')]
         columns += [k for k in triggers[0].__dict__.keys() if k not in columns and not k.startswith('_')]
@@ -698,10 +708,11 @@ class TriggerScheduler(BaseScheduler):
         scheduler_table = [columns]
         for j in triggers:
             j_dict = j.to_dict()
-            j_dict['base_function'] = "{}.{}".format(
-                getattr(j.base_function, '__module__', ''),
-                getattr(j.base_function, '__name__', '')
-            ) if j.base_function else ''
+            j_dict['base_function'] = (
+                f"{getattr(j.base_function, '__module__', '')}.{getattr(j.base_function, '__name__', '')}"
+                if j.base_function
+                else ''
+            )
 
             if not j_dict.get('base_task_id'):
                 j_dict['clone_task'] = ''

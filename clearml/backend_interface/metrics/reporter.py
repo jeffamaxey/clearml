@@ -362,8 +362,12 @@ class Reporter(InterfaceBase, AbstractContextManager, SetupUploadMixin, AsyncMan
             series=series,
             figure=figure,
             iter=iter,
-            force_save_as_image=force_save_as_image if not isinstance(force_save_as_image, str) else False,
-            report_as_debug_sample=force_save_as_image if isinstance(force_save_as_image, str) else False,
+            force_save_as_image=False
+            if isinstance(force_save_as_image, str)
+            else force_save_as_image,
+            report_as_debug_sample=force_save_as_image
+            if isinstance(force_save_as_image, str)
+            else False,
             reporter=self,
             logger=logger,
         )
@@ -426,7 +430,7 @@ class Reporter(InterfaceBase, AbstractContextManager, SetupUploadMixin, AsyncMan
                         continue
                     for k, v in d.items():
                         if isinstance(v, list):
-                            d[k] = list(to_base_type(s) for s in v)
+                            d[k] = [to_base_type(s) for s in v]
                         elif isinstance(v, tuple):
                             d[k] = tuple(to_base_type(s) for s in v)
                         else:
@@ -767,7 +771,9 @@ class Reporter(InterfaceBase, AbstractContextManager, SetupUploadMixin, AsyncMan
 
         return self.report_plot(
             title=self._normalize_name(title),
-            series=self._normalize_name(series) if not isinstance(series, list) else None,
+            series=None
+            if isinstance(series, list)
+            else self._normalize_name(series),
             plot=plotly_obj,
             iter=iter,
             nan_as_null=False,
@@ -843,7 +849,7 @@ class Reporter(InterfaceBase, AbstractContextManager, SetupUploadMixin, AsyncMan
 
         plotly_dict = create_3d_surface(
             np_value_matrix=data,
-            title=title + '/' + series,
+            title=f'{title}/{series}',
             xlabels=xlabels,
             ylabels=ylabels,
             series=series,
@@ -919,7 +925,7 @@ class Reporter(InterfaceBase, AbstractContextManager, SetupUploadMixin, AsyncMan
         self._report(ev)
         plotly_dict = create_image_plot(
             image_src=url,
-            title=title + '/' + series,
+            title=f'{title}/{series}',
             width=640,
             height=int(640 * float(height or 480) / float(width or 640)),
         )

@@ -147,7 +147,7 @@ class Task(IdObjectBase, AccessMixin, SetupUploadMixin):
         :type force_create: bool
         """
         SingletonLock.instantiate()
-        task_id = self._resolve_task_id(task_id, log=log) if not force_create else None
+        task_id = None if force_create else self._resolve_task_id(task_id, log=log)
         self.__edit_lock = None
         super(Task, self).__init__(id=task_id, session=session, log=log)
         self._project_name = None
@@ -175,7 +175,7 @@ class Task(IdObjectBase, AccessMixin, SetupUploadMixin):
             self._validate(check_output_dest_credentials=False)
 
         if self.data is None:
-            raise ValueError("Task ID \"{}\" could not be found".format(self.id))
+            raise ValueError(f'Task ID \"{self.id}\" could not be found')
 
         self._project_name = (self.project, project_name)
 
@@ -197,14 +197,14 @@ class Task(IdObjectBase, AccessMixin, SetupUploadMixin):
                 self.log.info('Validating output destination')
                 conf = get_config_for_bucket(base_url=output_dest)
                 if not conf:
-                    msg = 'Failed resolving output destination (no credentials found for %s)' % output_dest
+                    msg = f'Failed resolving output destination (no credentials found for {output_dest})'
                     self.log.warning(msg)
                     if raise_errors:
                         raise Exception(msg)
             except StorageError:
                 raise
             except Exception as ex:
-                self.log.error('Failed trying to verify output destination: %s' % ex)
+                self.log.error(f'Failed trying to verify output destination: {ex}')
 
     @classmethod
     def _resolve_task_id(cls, task_id, log=None):
@@ -212,7 +212,7 @@ class Task(IdObjectBase, AccessMixin, SetupUploadMixin):
             task_id = cls.normalize_id(get_remote_task_id())
             if task_id:
                 log = log or get_logger('task')
-                log.info('Using task ID from env %s=%s' % (TASK_ID_ENV_VAR[0], task_id))
+                log.info(f'Using task ID from env {TASK_ID_ENV_VAR[0]}={task_id}')
         return task_id
 
     def _update_repository(self):
@@ -320,17 +320,17 @@ class Task(IdObjectBase, AccessMixin, SetupUploadMixin):
             task_type = task_type.value
 
         if task_type not in (self.TaskTypes.training.value, self.TaskTypes.testing.value) and \
-                not Session.check_min_api_version('2.8'):
-            print('WARNING: Changing task type to "{}" : '
-                  'clearml-server does not support task type "{}", '
-                  'please upgrade clearml-server.'.format(self.TaskTypes.training, task_type))
+                    not Session.check_min_api_version('2.8'):
+            print(
+                f'WARNING: Changing task type to "{self.TaskTypes.training}" : clearml-server does not support task type "{task_type}", please upgrade clearml-server.'
+            )
             task_type = self.TaskTypes.training.value
 
         project_id = None
         if project_name:
             project_id = get_or_create_project(self, project_name)
 
-        tags = [self._development_tag] if not running_remotely() else []
+        tags = [] if running_remotely() else [self._development_tag]
         extra_properties = {'system_tags': tags} if Session.check_min_api_version('2.3') else {'tags': tags}
         req = tasks.CreateRequest(
             name=task_name or make_message('Anonymous task (%(user)s@%(host)s %(time)s)'),
@@ -342,7 +342,7 @@ class Task(IdObjectBase, AccessMixin, SetupUploadMixin):
         )
         res = self.send(req)
 
-        return res.response.id if res else 'offline-{}'.format(str(uuid4()).replace("-", ""))
+        return res.response.id if res else f'offline-{str(uuid4()).replace("-", "")}'
 
     def _set_storage_uri(self, value):
         value = value.rstrip('/') if value else None
@@ -355,10 +355,7 @@ class Task(IdObjectBase, AccessMixin, SetupUploadMixin):
         # type: () -> Optional[str]
         if self._storage_uri:
             return self._storage_uri
-        if running_remotely():
-            return self.data.output.destination
-        else:
-            return None
+        return self.data.output.destination if running_remotely() else None
 
     @storage_uri.setter
     def storage_uri(self, value):

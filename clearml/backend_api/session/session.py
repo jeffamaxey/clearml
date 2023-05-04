@@ -214,15 +214,17 @@ class Session(TokenManager):
             api_version = token_dict.get('api_version')
             if not api_version:
                 api_version = '2.2' if token_dict.get('env', '') == 'prod' else Session.api_version
-            if token_dict.get('server_version'):
-                if not any(True for c in Session._client if c[0] == 'clearml-server'):
-                    Session._client.append(('clearml-server', token_dict.get('server_version'), ))
+            if token_dict.get('server_version') and not any(
+                True for c in Session._client if c[0] == 'clearml-server'
+            ):
+                Session._client.append(('clearml-server', token_dict.get('server_version'), ))
 
             Session.max_api_version = Session.api_version = str(api_version)
             Session.feature_set = str(token_dict.get('feature_set', self.feature_set) or "basic")
         except (jwt.DecodeError, ValueError):
             local_logger().warning(
-                "Failed parsing server API level, defaulting to {}".format(Session.api_version))
+                f"Failed parsing server API level, defaulting to {Session.api_version}"
+            )
 
         # now setup the session reporting, so one consecutive retries will show warning
         # we do that here, so if we have problems authenticating, we see them immediately
@@ -250,10 +252,12 @@ class Session(TokenManager):
             try:
                 retry_codes.add(int(code))
             except (ValueError, TypeError):
-                print("Warning: invalid extra HTTP retry code detected: {}".format(code))
+                print(f"Warning: invalid extra HTTP retry code detected: {code}")
 
         if retry_codes.difference(self._retry_codes):
-            print("Using extra HTTP retry codes {}".format(sorted(retry_codes.difference(self._retry_codes))))
+            print(
+                f"Using extra HTTP retry codes {sorted(retry_codes.difference(self._retry_codes))}"
+            )
 
         return list(retry_codes)
 
@@ -295,18 +299,17 @@ class Session(TokenManager):
         default = self.config.get("sdk.apply_environment", False)
         if ENV_ENABLE_ENV_CONFIG_SECTION.get(default=default):
             try:
-                keys = apply_environment(self.config)
-                if keys:
-                    print("Environment variables set from configuration: {}".format(keys))
+                if keys := apply_environment(self.config):
+                    print(f"Environment variables set from configuration: {keys}")
             except Exception as ex:
-                local_logger().warning("Failed applying environment from configuration: {}".format(ex))
+                local_logger().warning(f"Failed applying environment from configuration: {ex}")
 
         default = self.config.get("sdk.apply_files", default=False)
         if ENV_ENABLE_FILES_CONFIG_SECTION.get(default=default):
             try:
                 apply_files(self.config)
             except Exception as ex:
-                local_logger().warning("Failed applying files from configuration: {}".format(ex))
+                local_logger().warning(f"Failed applying files from configuration: {ex}")
 
     def _send_request(
         self,
@@ -357,12 +360,11 @@ class Session(TokenManager):
             try:
                 res = self.__http_session.request(
                     method, url, headers=headers, auth=auth, data=data, json=json, timeout=timeout)
-            # except Exception as ex:
             except SSLError as ex:
                 retry_counter += 1
                 # we should retry
                 if retry_counter >= self._ssl_error_count_verbosity:
-                    (self._logger or get_logger()).warning("SSLError Retrying {}".format(ex))
+                    (self._logger or get_logger()).warning(f"SSLError Retrying {ex}")
                 sleep(0.1)
                 continue
 
@@ -383,9 +385,7 @@ class Session(TokenManager):
                 and self.config.get("api.http.wait_on_maintenance_forever", True)
             ):
                 (self._logger or get_logger()).warning(
-                    "Service unavailable: {} is undergoing maintenance, retrying...".format(
-                        host
-                    )
+                    f"Service unavailable: {host} is undergoing maintenance, retrying..."
                 )
                 retry_counter += 1
                 continue
@@ -394,7 +394,7 @@ class Session(TokenManager):
         return res
 
     def add_auth_headers(self, headers):
-        headers[self._AUTHORIZATION_HEADER] = "Bearer {}".format(self.token)
+        headers[self._AUTHORIZATION_HEADER] = f"Bearer {self.token}"
         return headers
 
     def send_request(
@@ -494,8 +494,9 @@ class Session(TokenManager):
                 # readjust the slice
                 slice = req_data[cur: cur + size]
                 if not slice:
-                    raise MaxRequestSizeError('Error: {}.{} request exceeds limit {} > {} bytes'.format(
-                        service, action, len(req_data), self.__max_req_size))
+                    raise MaxRequestSizeError(
+                        f'Error: {service}.{action} request exceeds limit {len(req_data)} > {self.__max_req_size} bytes'
+                    )
             res = self.send_request(
                 method=method,
                 service=service,
@@ -581,7 +582,7 @@ class Session(TokenManager):
                 headers=headers,
             )
 
-        call_result = CallResult.from_result(
+        return CallResult.from_result(
             res=res,
             request_cls=req_obj.__class__,
             logger=self._logger,
@@ -589,8 +590,6 @@ class Session(TokenManager):
             action=req_obj._action,
             session=self,
         )
-
-        return call_result
 
     @classmethod
     def get_api_server_host(cls, config=None):
@@ -606,9 +605,9 @@ class Session(TokenManager):
             from ...config import config_obj
             config = config_obj
 
-        # get from config/environment
-        web_host = ENV_WEB_HOST.get(default=config.get("api.web_server", "")).rstrip('/')
-        if web_host:
+        if web_host := ENV_WEB_HOST.get(
+            default=config.get("api.web_server", "")
+        ).rstrip('/'):
             return web_host
 
         # return default
@@ -633,9 +632,9 @@ class Session(TokenManager):
         if not config:
             from ...config import config_obj
             config = config_obj
-        # get from config/environment
-        files_host = ENV_FILES_HOST.get(default=(config.get("api.files_server", ""))).rstrip('/')
-        if files_host:
+        if files_host := ENV_FILES_HOST.get(
+            default=(config.get("api.files_server", ""))
+        ).rstrip('/'):
             return files_host
 
         # return default
@@ -653,7 +652,7 @@ class Session(TokenManager):
         elif parsed.netloc.startswith('app.'):
             parsed = parsed._replace(netloc=parsed.netloc.replace('app.', 'files.', 1))
         else:
-            parsed = parsed._replace(netloc=parsed.netloc + ':8081')
+            parsed = parsed._replace(netloc=f'{parsed.netloc}:8081')
 
         return urlunparse(parsed)
 
@@ -667,8 +666,7 @@ class Session(TokenManager):
             if cls._offline_mode:
                 # allow to change the offline mode version by setting ENV_OFFLINE_MODE to the required API version
                 if cls.api_version != cls._offline_default_version:
-                    offline_api = ENV_OFFLINE_MODE.get(converter=lambda x: x)
-                    if offline_api:
+                    if offline_api := ENV_OFFLINE_MODE.get(converter=lambda x: x):
                         try:
                             # check cast to float, but leave original str if we pass it.
                             # minimum version is 2.3
@@ -718,15 +716,13 @@ class Session(TokenManager):
         verbose = self._verbose and self._logger
         if verbose:
             self._logger.info(
-                "Refreshing token from {} (access_key={}, exp={})".format(
-                    self.host, self.access_key, exp
-                )
+                f"Refreshing token from {self.host} (access_key={self.access_key}, exp={exp})"
             )
 
         headers = None
         # use token only once (the second time the token is already built into the http session)
         if self.__auth_token:
-            headers = dict(Authorization="Bearer {}".format(self.__auth_token))
+            headers = dict(Authorization=f"Bearer {self.__auth_token}")
             self.__auth_token = None
 
         auth = HTTPBasicAuth(self.access_key, self.secret_key) if self.access_key and self.secret_key else None
@@ -749,9 +745,7 @@ class Session(TokenManager):
             if res.status_code != 200:
                 msg = resp.get("meta", {}).get("result_msg", res.reason)
                 raise LoginError(
-                    "Failed getting token (error {} from {}): {}".format(
-                        res.status_code, self.host, msg
-                    )
+                    f"Failed getting token (error {res.status_code} from {self.host}): {msg}"
                 )
             if verbose:
                 self._logger.info("Received new token")
@@ -766,13 +760,15 @@ class Session(TokenManager):
         except KeyError as ex:
             # check if this is a misconfigured api server (getting 200 without the data section)
             if res and res.status_code == 200:
-                raise ValueError('It seems *api_server* is misconfigured. '
-                                 'Is this the ClearML API server {} ?'.format(self.host))
+                raise ValueError(
+                    f'It seems *api_server* is misconfigured. Is this the ClearML API server {self.host} ?'
+                )
             else:
-                raise LoginError("Response data mismatch: No 'token' in 'data' value from res, receive : {}, "
-                                 "exception: {}".format(res, ex))
+                raise LoginError(
+                    f"Response data mismatch: No 'token' in 'data' value from res, receive : {res}, exception: {ex}"
+                )
         except Exception as ex:
-            raise LoginError('Unrecognized Authentication Error: {} {}'.format(type(ex), ex))
+            raise LoginError(f'Unrecognized Authentication Error: {type(ex)} {ex}')
 
     def __str__(self):
         return "{self.__class__.__name__}[{self.host}, {self.access_key}/{secret_key}]".format(

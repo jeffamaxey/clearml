@@ -29,7 +29,11 @@ def pip_freeze(combine_conda_with_pip=False):
                     req_lines.append(pip_req_line[0])
                     continue
 
-                req_lines.append('{}=={}'.format(name[0], r['version']) if r.get('version') else '{}'.format(name[0]))
+                req_lines.append(
+                    f"{name[0]}=={r['version']}"
+                    if r.get('version')
+                    else f'{name[0]}'
+                )
                 continue
 
             # check if we have it in our required packages
@@ -40,7 +44,9 @@ def pip_freeze(combine_conda_with_pip=False):
             # skip over packages with _
             if name.startswith('_'):
                 continue
-            conda_lines.append('{}=={}'.format(name, r['version']) if r.get('version') else '{}'.format(name))
+            conda_lines.append(
+                f"{name}=={r['version']}" if r.get('version') else f'{name}'
+            )
         # make sure we see the conda packages, put them into the pip as well
         if combine_conda_with_pip and conda_lines:
             req_lines += ['', '# Conda Packages', ''] + conda_lines
@@ -60,7 +66,7 @@ def pip_freeze(combine_conda_with_pip=False):
                     list_lines = get_command_output(
                         [sys.executable, "-m", "pip", "list", "--format", "freeze"]).splitlines()
                     for index, name in local_packages:
-                        line = [r for r in list_lines if r.strip().startswith(name+'==')]
+                        line = [r for r in list_lines if r.strip().startswith(f'{name}==')]
                         if not line:
                             continue
                         line = line[0]
@@ -68,6 +74,6 @@ def pip_freeze(combine_conda_with_pip=False):
                 except Exception:
                     pass
         except Exception as ex:
-            print('Failed calling "pip freeze": {}'.format(str(ex)))
+            print(f'Failed calling "pip freeze": {str(ex)}')
 
     return "\n".join(req_lines), "\n".join(conda_lines)

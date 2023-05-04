@@ -27,11 +27,11 @@ class EnvEntry(Entry):
         environ[key] = value
 
     def __str__(self):
-        return "env:{}".format(super(EnvEntry, self).__str__())
+        return f"env:{super(EnvEntry, self).__str__()}"
 
     def error(self, message):
         if not self._ignore_errors:
-            print("Environment configuration: {}".format(message))
+            print(f"Environment configuration: {message}")
 
     def exists(self):
         return any(key for key in self.keys if getenv(key) is not None)

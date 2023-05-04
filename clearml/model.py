@@ -101,13 +101,11 @@ class Framework(Options):
 
     @classmethod
     def get_framework_parents(cls, framework):
-        if not framework:
-            return []
-        parents = []
-        for k, v in cls.__parent_mapping.items():
-            if framework in v:
-                parents.append(k)
-        return parents
+        return (
+            [k for k, v in cls.__parent_mapping.items() if framework in v]
+            if framework
+            else []
+        )
 
     @classmethod
     def _get_file_ext(cls, framework, filename):
@@ -363,7 +361,7 @@ class BaseModel(object):
 
         if not packed_file:
             if raise_on_error:
-                raise ValueError('Model package \'{}\' could not be downloaded'.format(self.url))
+                raise ValueError(f"Model package \'{self.url}\' could not be downloaded")
             return None
 
         # unpack
@@ -381,11 +379,7 @@ class BaseModel(object):
         else:
             raise ValueError('cannot extract files from packaged model at %s', packed_file)
 
-        if return_path:
-            return target_folder
-
-        target_files = list(Path(target_folder).glob('*'))
-        return target_files
+        return target_folder if return_path else list(Path(target_folder).glob('*'))
 
     def publish(self):
         # type: () -> ()
@@ -425,9 +419,10 @@ class BaseModel(object):
 
     @staticmethod
     def _config_dict_to_text(config):
-        if not isinstance(config, six.string_types) and not isinstance(config, dict):
+        if isinstance(config, (six.string_types, dict)):
+            return config_dict_to_text(config)
+        else:
             raise ValueError("Model configuration only supports dictionary or string objects")
-        return config_dict_to_text(config)
 
     @staticmethod
     def _text_to_config_dict(text):
@@ -544,20 +539,25 @@ class Model(BaseModel):
         res = _Model._get_default_session().send(
             models.GetAllRequest(
                 project=[project.id] if project else None,
-                name=exact_match_regex(model_name) if model_name is not None else None,
+                name=exact_match_regex(model_name)
+                if model_name is not None
+                else None,
                 only_fields=only_fields,
                 tags=tags or None,
-                system_tags=["-" + cls._archived_tag] if not include_archived else None,
+                system_tags=None
+                if include_archived
+                else [f"-{cls._archived_tag}"],
                 ready=True if only_published else None,
                 order_by=['-created'],
                 page=0 if max_results else None,
                 page_size=max_results or None,
             )
         )
-        if not res.response.models:
-            return []
-
-        return [Model(model_id=m.id) for m in res.response.models]
+        return (
+            [Model(model_id=m.id) for m in res.response.models]
+            if res.response.models
+            else []
+        )
 
     @property
     def id(self):
@@ -586,7 +586,7 @@ class Model(BaseModel):
             weights_url = model.url
         except Exception:
             if raise_on_errors:
-                raise ValueError("Could not find model id={}".format(model.id))
+                raise ValueError(f"Could not find model id={model.id}")
             return False
 
         try:
@@ -597,11 +597,11 @@ class Model(BaseModel):
             response = res.wait()
             if not response.ok():
                 if raise_on_errors:
-                    raise ValueError("Could not remove model id={}: {}".format(model.id, response.meta))
+                    raise ValueError(f"Could not remove model id={model.id}: {response.meta}")
                 return False
         except SendError as ex:
             if raise_on_errors:
-                raise ValueError("Could not remove model id={}: {}".format(model.id, ex))
+                raise ValueError(f"Could not remove model id={model.id}: {ex}")
             return False
         except ValueError:
             if raise_on_errors:
@@ -609,7 +609,7 @@ class Model(BaseModel):
             return False
         except Exception as ex:
             if raise_on_errors:
-                raise ValueError("Could not remove model id={}: {}".format(model.id, ex))
+                raise ValueError(f"Could not remove model id={model.id}: {ex}")
             return False
 
         if not delete_weights_file:
@@ -619,12 +619,15 @@ class Model(BaseModel):
         try:
             if not helper.delete(weights_url):
                 if raise_on_errors:
-                    raise ValueError("Could not remove model id={} weights file: {}".format(model.id, weights_url))
+                    raise ValueError(
+                        f"Could not remove model id={model.id} weights file: {weights_url}"
+                    )
                 return False
         except Exception as ex:
             if raise_on_errors:
-                raise ValueError("Could not remove model id={} weights file \'{}\': {}".format(
-                    model.id, weights_url, ex))
+                raise ValueError(
+                    f"Could not remove model id={model.id} weights file \'{weights_url}\': {ex}"
+                )
             return False
 
         return True
@@ -730,8 +733,11 @@ class InputModel(Model):
         # convert local to file to remote one
         weights_url = CacheManager.get_remote_url(weights_url)
 
-        extra = {'system_tags': ["-" + cls._archived_tag]} \
-            if Session.check_min_api_version('2.3') else {'tags': ["-" + cls._archived_tag]}
+        extra = (
+            {'system_tags': [f"-{cls._archived_tag}"]}
+            if Session.check_min_api_version('2.3')
+            else {'tags': [f"-{cls._archived_tag}"]}
+        )
         # noinspection PyProtectedMember
         result = _Model._get_default_session().send(models.GetAllRequest(
             uri=[weights_url],
@@ -742,7 +748,7 @@ class InputModel(Model):
         if result.response.models:
             logger = get_logger()
 
-            logger.debug('A model with uri "{}" already exists. Selecting it'.format(weights_url))
+            logger.debug(f'A model with uri "{weights_url}" already exists. Selecting it')
 
             model = get_single_result(
                 entity='model',
@@ -752,7 +758,7 @@ class InputModel(Model):
                 raise_on_error=False,
             )
 
-            logger.info("Selected model id: {}".format(model.id))
+            logger.info(f"Selected model id: {model.id}")
 
             return InputModel(model_id=model.id)
 
@@ -764,16 +770,16 @@ class InputModel(Model):
         from .task import Task
         task = Task.current_task()
         if task:
-            comment = 'Imported by task id: {}'.format(task.id) + ('\n' + comment if comment else '')
+            comment = f'Imported by task id: {task.id}' + (
+                '\n' + comment if comment else ''
+            )
             project_id = task.project
-            name = name or 'Imported by {}'.format(task.name or '')
-            # do not register the Task, because we do not want it listed after as "output model",
-            # the Task never actually created the Model
-            task_id = None
+            name = name or f"Imported by {task.name or ''}"
         else:
             project_id = None
-            task_id = None
-
+        # do not register the Task, because we do not want it listed after as "output model",
+        # the Task never actually created the Model
+        task_id = None
         if project:
             project_id = get_or_create_project(
                 session=task.session if task else Task._get_default_session(),
@@ -845,8 +851,11 @@ class InputModel(Model):
 
         if not load_archived:
             # noinspection PyTypeChecker
-            extra = {'system_tags': ["-" + _Task.archived_tag]} \
-                if Session.check_min_api_version('2.3') else {'tags': ["-" + cls._archived_tag]}
+            extra = (
+                {'system_tags': [f"-{_Task.archived_tag}"]}
+                if Session.check_min_api_version('2.3')
+                else {'tags': [f"-{cls._archived_tag}"]}
+            )
         else:
             extra = {}
 
@@ -924,12 +933,17 @@ class InputModel(Model):
         :param only_published: If True filter out non-published (draft) models
         """
         if not model_id:
-            found_models = self.query_models(
-                project_name=project, model_name=name, tags=tags, only_published=only_published)
-            if not found_models:
-                raise ValueError("Could not locate model with project={} name={} tags={} published={}".format(
-                    project, name, tags, only_published))
-            model_id = found_models[0].id
+            if found_models := self.query_models(
+                project_name=project,
+                model_name=name,
+                tags=tags,
+                only_published=only_published,
+            ):
+                model_id = found_models[0].id
+            else:
+                raise ValueError(
+                    f"Could not locate model with project={project} name={name} tags={tags} published={only_published}"
+                )
         super(InputModel, self).__init__(model_id)
 
     @property
@@ -1020,9 +1034,7 @@ class OutputModel(BaseModel):
         :return:
 
         """
-        if not self.id:
-            return False
-        return self._get_base_model().locked
+        return self._get_base_model().locked if self.id else False
 
     @property
     def config_text(self):
@@ -1156,8 +1168,8 @@ class OutputModel(BaseModel):
         if not task:
             from .task import Task
             task = Task.current_task()
-            if not task:
-                raise ValueError("task object was not provided, and no current task was found")
+        if not task:
+            raise ValueError("task object was not provided, and no current task was found")
 
         super(OutputModel, self).__init__(task=task)
 
@@ -1174,8 +1186,10 @@ class OutputModel(BaseModel):
             labels=label_enumeration or task.get_labels_enumeration(),
             name=name or self._task.name,
             tags=tags,
-            comment='{} by task id: {}'.format('Created' if not base_model_id else 'Overwritten', task.id) +
-                    ('\n' + comment if comment else ''),
+            comment=(
+                f"{'Overwritten' if base_model_id else 'Created'} by task id: {task.id}"
+                + ('\n' + comment if comment else '')
+            ),
             framework=framework,
             upload_storage_uri=task.output_uri,
         )
@@ -1193,13 +1207,16 @@ class OutputModel(BaseModel):
                 task_id=self._task.id,
                 project_id=self._task.project,
                 name=self._floating_data.name or self._task.name,
-                comment=('{}\n{}'.format(_base_model.comment, self._floating_data.comment)
-                         if (_base_model.comment and self._floating_data.comment and
-                             self._floating_data.comment not in _base_model.comment)
-                         else (_base_model.comment or self._floating_data.comment)),
+                comment=f'{_base_model.comment}\n{self._floating_data.comment}'
+                if (
+                    _base_model.comment
+                    and self._floating_data.comment
+                    and self._floating_data.comment not in _base_model.comment
+                )
+                else (_base_model.comment or self._floating_data.comment),
                 tags=self._floating_data.tags,
                 framework=self._floating_data.framework,
-                upload_storage_uri=self._floating_data.upload_storage_uri
+                upload_storage_uri=self._floating_data.upload_storage_uri,
             )
             self._base_model = _base_model
             self._floating_data = None
@@ -1283,7 +1300,9 @@ class OutputModel(BaseModel):
         try:
             uri = storage.verify_upload(folder_uri=uri)
         except Exception:
-            raise ValueError("Could not set destination uri to: %s [Check write permissions]" % uri)
+            raise ValueError(
+                f"Could not set destination uri to: {uri} [Check write permissions]"
+            )
 
         # store default uri
         self._get_base_model().upload_storage_uri = uri
@@ -1335,7 +1354,7 @@ class OutputModel(BaseModel):
                 if filename:
                     os.remove(filename)
             except OSError:
-                self._log.debug('Failed removing temporary file %s' % filename)
+                self._log.debug(f'Failed removing temporary file {filename}')
 
         # test if we can update the model
         if self.id and self.published:
@@ -1405,7 +1424,9 @@ class OutputModel(BaseModel):
             register_uri = weights_filename
             weights_filename = None
             auto_delete_file = False
-            self._log.info('No output storage destination defined, registering local model %s' % register_uri)
+            self._log.info(
+                f'No output storage destination defined, registering local model {register_uri}'
+            )
 
         # start the upload
         if weights_filename:
@@ -1485,8 +1506,14 @@ class OutputModel(BaseModel):
         try:
             with zipfile.ZipFile(zip_file, 'w', allowZip64=True, compression=zipfile.ZIP_STORED) as zf:
                 for filename in weights_filenames:
-                    relative_file_name = Path(filename).name if not weights_path else \
-                        Path(filename).absolute().relative_to(Path(weights_path).absolute()).as_posix()
+                    relative_file_name = (
+                        Path(filename)
+                        .absolute()
+                        .relative_to(Path(weights_path).absolute())
+                        .as_posix()
+                        if weights_path
+                        else Path(filename).name
+                    )
                     zf.write(filename, arcname=relative_file_name)
         finally:
             os.close(fd)
@@ -1548,14 +1575,10 @@ class OutputModel(BaseModel):
 
         if self.id:
             # update the model object (this will happen if we resumed a training task)
-            result = self._get_force_base_model().edit(design=config_text)
-        else:
-            # noinspection PyProtectedMember
-            self._floating_data.design = _Model._wrap_design(config_text)
-            result = Waitable()
-
-        # you can wait on this object
-        return result
+            return self._get_force_base_model().edit(design=config_text)
+        # noinspection PyProtectedMember
+        self._floating_data.design = _Model._wrap_design(config_text)
+        return Waitable()
 
     def update_labels(self, labels):
         # type: (Mapping[str, int]) -> Optional[Waitable]
@@ -1585,13 +1608,9 @@ class OutputModel(BaseModel):
 
         if self.id:
             # update the model object (this will happen if we resumed a training task)
-            result = self._get_force_base_model().edit(labels=labels)
-        else:
-            self._floating_data.labels = labels
-            result = Waitable()
-
-        # you can wait on this object
-        return result
+            return self._get_force_base_model().edit(labels=labels)
+        self._floating_data.labels = labels
+        return Waitable()
 
     @classmethod
     def wait_for_uploads(cls, timeout=None, max_num_uploads=None):
@@ -1649,8 +1668,9 @@ class OutputModel(BaseModel):
         # now we have to update the creator task so it points to us
         if str(self._task.status) not in (
                 str(self._task.TaskStatusEnum.created), str(self._task.TaskStatusEnum.in_progress)):
-            self._log.warning('Could not update last created model in Task {}, '
-                              'Task status \'{}\' cannot be updated'.format(self._task.id, self._task.status))
+            self._log.warning(
+                f"Could not update last created model in Task {self._task.id}, Task status \'{self._task.status}\' cannot be updated"
+            )
         else:
             self._base_model.update_for_task(
                 task_id=self._task.id, model_id=self.id, type_="output", name=task_model_entry)
@@ -1663,9 +1683,7 @@ class OutputModel(BaseModel):
         return self._get_force_base_model()
 
     def _get_model_data(self):
-        if self._base_model:
-            return self._base_model.data
-        return self._floating_data
+        return self._base_model.data if self._base_model else self._floating_data
 
     def _validate_update(self):
         # test if we can update the model
@@ -1675,9 +1693,10 @@ class OutputModel(BaseModel):
         return True
 
     def _get_last_uploaded_filename(self):
-        if not self._last_uploaded_url and not self.url:
+        if self._last_uploaded_url or self.url:
+            return Path(self._last_uploaded_url or self.url).name
+        else:
             return None
-        return Path(self._last_uploaded_url or self.url).name
 
 
 class Waitable(object):

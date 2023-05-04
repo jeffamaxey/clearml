@@ -83,19 +83,19 @@ class _Arguments(object):
                          a_args=None, a_namespace=None, a_parsed_args=None):
         # noinspection PyProtectedMember
         actions = [
-            a for a in a_parser._actions
-            if isinstance(a, _StoreAction) or isinstance(a, _StoreConstAction)
+            a
+            for a in a_parser._actions
+            if isinstance(a, (_StoreAction, _StoreConstAction))
         ]
         args_dict = {}
         # noinspection PyBroadException
         try:
             if isinstance(a_parsed_args, dict):
                 args_dict = a_parsed_args
+            elif a_parsed_args:
+                args_dict = a_parsed_args.__dict__
             else:
-                if a_parsed_args:
-                    args_dict = a_parsed_args.__dict__
-                else:
-                    args_dict = call_original_argparser(a_parser, args=a_args, namespace=a_namespace).__dict__
+                args_dict = call_original_argparser(a_parser, args=a_args, namespace=a_namespace).__dict__
             defaults_ = {
                 a.dest: cls.__cast_arg(args_dict.get(a.dest), a.type) for a in actions
             }
@@ -107,10 +107,10 @@ class _Arguments(object):
             }
 
         desc_ = {
-            a.dest: str(a.help) or (
-                '{}default: {}'.format('choices: {}, '.format(a.choices) if a.choices else '',
-                                       defaults_.get(a.dest, '')))
-            for a in actions}
+            a.dest: str(a.help)
+            or f"{f'choices: {a.choices}, ' if a.choices else ''}default: {defaults_.get(a.dest, '')}"
+            for a in actions
+        }
         descriptions.update(desc_)
         types_ = {a.dest: (a.type or None) for a in actions}
         arg_types.update(types_)
@@ -210,9 +210,7 @@ class _Arguments(object):
         sub_parsers = [a for a in a_parser._actions if isinstance(a, _SubParsersAction)]
         for sub_parser in sub_parsers:
             for choice in sub_parser.choices.values():
-                # recursively parse
-                _action = cls._find_parser_action(choice, name)
-                if _action:
+                if _action := cls._find_parser_action(choice, name):
                     _actions.extend(_action)
         return _actions
 
@@ -228,7 +226,7 @@ class _Arguments(object):
 
     def copy_to_parser(self, parser, parsed_args):
         def cast_to_bool_int(value, strip=False):
-            a_strip_v = value if not strip else str(value).lower().strip()
+            a_strip_v = str(value).lower().strip() if strip else value
             if a_strip_v == 'false' or not a_strip_v:
                 return False
             elif a_strip_v == 'true':
@@ -319,7 +317,7 @@ class _Arguments(object):
                         # because isinstance(var_type, type(None)) === False
                         var_type = str
                     elif var_type not in (bool, int, float, str, dict, list, tuple) and \
-                            str(self.__cast_arg(current_action.default)) == str(v):
+                                str(self.__cast_arg(current_action.default)) == str(v):
                         # there is nothing we can Do, just leave with the default
                         continue
 
@@ -389,7 +387,7 @@ class _Arguments(object):
                             arg_parser_arguments[k] = v = None
                         elif (not isfunction(current_action.type)
                               and current_action.default == current_action.type(v)) \
-                                or (isfunction(current_action.type) and
+                                    or (isfunction(current_action.type) and
                                     str(self.__cast_arg(current_action.default)) == str(v)):
                             # this will make sure that if we have type float and default value int,
                             # we will keep the type as int, just like the original argparser
@@ -413,14 +411,8 @@ class _Arguments(object):
                         # python2 doesn't support defaults for positional arguments, unless used with nargs=?
                         if PY2 and not current_action.nargs:
                             current_action.nargs = '?'
-                    else:
-                        # do not add parameters that do not exist in argparser, they might be the dict
-                        pass
-                except ArgumentError:
+                except (ArgumentError, Exception):
                     pass
-                except Exception:
-                    pass
-
         self._remove_req_flag_from_mutex_groups(parser)
 
         # if API supports sections, we can update back the Args section with all the missing default
@@ -428,7 +420,7 @@ class _Arguments(object):
             # noinspection PyBroadException
             try:
                 task_defaults, task_defaults_descriptions, task_defaults_types = \
-                    self._get_defaults_from_argparse(parser, parsed_args=parsed_args)
+                        self._get_defaults_from_argparse(parser, parsed_args=parsed_args)
                 # select what's missing, and update it
                 missing_keys = [k for k in task_defaults.keys() if k[len(self._prefix_args):] not in task_arguments]
                 task_defaults = {k: v for k, v in task_defaults.items() if k in missing_keys}
@@ -459,26 +451,21 @@ class _Arguments(object):
         if prefix:
             prefix = prefix.strip(self._prefix_sep) + self._prefix_sep
             if descriptions:
-                descriptions = dict((prefix+k, v) for k, v in descriptions.items())
+                descriptions = {prefix+k: v for k, v in descriptions.items()}
             if param_types:
-                param_types = dict((prefix + k, v) for k, v in param_types.items())
-            # this will only set the specific section
-            self._task.update_parameters(
-                dictionary,
-                __parameters_prefix=prefix,
-                __parameters_descriptions=descriptions,
-                __parameters_types=param_types,
-            )
-        else:
-            self._task.update_parameters(
-                dictionary,
-                __parameters_prefix=prefix,
-                __parameters_descriptions=descriptions,
-                __parameters_types=param_types,
-            )
-        if not isinstance(dictionary, self._ProxyDictWrite):
-            return self._ProxyDictWrite(self, prefix, **dictionary)
-        return dictionary
+                param_types = {prefix + k: v for k, v in param_types.items()}
+        # this will only set the specific section
+        self._task.update_parameters(
+            dictionary,
+            __parameters_prefix=prefix,
+            __parameters_descriptions=descriptions,
+            __parameters_types=param_types,
+        )
+        return (
+            dictionary
+            if isinstance(dictionary, self._ProxyDictWrite)
+            else self._ProxyDictWrite(self, prefix, **dictionary)
+        )
 
     def copy_to_dict(self, dictionary, prefix=None):
         # iterate over keys and merge values according to parameter type in dictionary
@@ -512,15 +499,11 @@ class _Arguments(object):
                 continue
 
             # if default value is not specified, allow casting based on what we have on the Task
-            if v is not None:
+            if v is not None or not parameters_type.get(k):
                 v_type = type(v)
-            elif parameters_type.get(k):
+            else:
                 v_type_str = parameters_type.get(k)
                 v_type = next((t for t in (bool, int, float, str, list, tuple) if t.__name__ == v_type_str), str)
-            else:
-                # this will be type(None), we deal with it later
-                v_type = type(v)
-
             # assume more general purpose type int -> float
             if v_type == int:
                 if v is not None and int(v) != float(v):
@@ -533,8 +516,9 @@ class _Arguments(object):
                     try:
                         param = str(param).lower().strip() == 'true'
                     except ValueError:
-                        self._task.log.warning('Failed parsing task parameter %s=%s keeping default %s=%s' %
-                                               (str(k), str(param), str(k), str(v)))
+                        self._task.log.warning(
+                            f'Failed parsing task parameter {str(k)}={param} keeping default {str(k)}={str(v)}'
+                        )
                         continue
             elif v_type == list:
                 # noinspection PyBroadException
@@ -542,8 +526,9 @@ class _Arguments(object):
                     p = str(param).strip()
                     param = yaml.load(p, Loader=FloatSafeLoader)
                 except Exception:
-                    self._task.log.warning('Failed parsing task parameter %s=%s keeping default %s=%s' %
-                                           (str(k), str(param), str(k), str(v)))
+                    self._task.log.warning(
+                        f'Failed parsing task parameter {str(k)}={str(param)} keeping default {str(k)}={str(v)}'
+                    )
                     continue
             elif v_type == tuple:
                 # noinspection PyBroadException
@@ -551,8 +536,9 @@ class _Arguments(object):
                     p = str(param).strip().replace('(', '[', 1)[::-1].replace(')', ']', 1)[::-1]
                     param = tuple(yaml.load(p, Loader=FloatSafeLoader))
                 except Exception:
-                    self._task.log.warning('Failed parsing task parameter %s=%s keeping default %s=%s' %
-                                           (str(k), str(param), str(k), str(v)))
+                    self._task.log.warning(
+                        f'Failed parsing task parameter {str(k)}={param} keeping default {str(k)}={str(v)}'
+                    )
                     continue
             elif v_type == dict:
                 # noinspection PyBroadException
@@ -560,8 +546,9 @@ class _Arguments(object):
                     p = str(param).strip()
                     param = yaml.load(p, Loader=FloatSafeLoader)
                 except Exception:
-                    self._task.log.warning('Failed parsing task parameter %s=%s keeping default %s=%s' %
-                                           (str(k), str(param), str(k), str(v)))
+                    self._task.log.warning(
+                        f'Failed parsing task parameter {str(k)}={str(param)} keeping default {str(k)}={str(v)}'
+                    )
 
             # noinspection PyBroadException
             try:
@@ -573,17 +560,20 @@ class _Arguments(object):
                 else:
                     dictionary[k] = None if param == '' else v_type(param)
             except Exception:
-                self._task.log.warning('Failed parsing task parameter %s=%s keeping default %s=%s' %
-                                       (str(k), str(param), str(k), str(v)))
+                self._task.log.warning(
+                    f'Failed parsing task parameter {str(k)}={str(param)} keeping default {str(k)}={str(v)}'
+                )
                 continue
         # add missing parameters to dictionary
         # for k, v in parameters.items():
         #     if k not in dictionary:
         #         dictionary[k] = v
 
-        if not isinstance(dictionary, self._ProxyDictReadOnly):
-            return self._ProxyDictReadOnly(self, prefix, **dictionary)
-        return dictionary
+        return (
+            dictionary
+            if isinstance(dictionary, self._ProxyDictReadOnly)
+            else self._ProxyDictReadOnly(self, prefix, **dictionary)
+        )
 
     @classmethod
     def get_supported_types(cls, as_str=False):
@@ -594,17 +584,14 @@ class _Arguments(object):
         :return: List of type objects supported for auto casting (serializing to string)
         """
         supported_types = (int, float, bool, str, list, tuple)
-        if as_str:
-            return tuple([str(t) for t in supported_types])
-
-        return supported_types
+        return tuple(str(t) for t in supported_types) if as_str else supported_types
 
     @classmethod
     def __cast_arg(cls, arg, dtype=None):
         if arg is None or callable(arg):
             return ''
         # If this an instance, just store the type
-        if str(hex(id(arg))) in str(arg):
+        if hex(id(arg)) in str(arg):
             return str(type(arg))
         if dtype in (float, int) and isinstance(arg, list):
             return [None if a is None else dtype(a) for a in arg]

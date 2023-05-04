@@ -33,7 +33,7 @@ class BaseScheduleJob(object):
     def update(self, a_job):
         # type: (Union[Dict, BaseScheduleJob]) -> BaseScheduleJob
         converters = {a.name: a.converter for a in getattr(self, '__attrs_attrs__', [])}
-        for k, v in (a_job.to_dict(full=True) if not isinstance(a_job, dict) else a_job).items():
+        for k, v in (a_job if isinstance(a_job, dict) else a_job.to_dict(full=True)).items():
             if v is not None and not callable(getattr(self, k, v)):
                 setattr(self, k, converters[k](v) if converters.get(k) else v)
         return self
@@ -81,8 +81,7 @@ class ScheduleJob(BaseScheduleJob):
         # type: () -> None
         def check_integer(value):
             try:
-                return False if not isinstance(value, (int, float)) or \
-                               int(value) != float(value) else True
+                return isinstance(value, (int, float)) and int(value) == float(value)
             except (TypeError, ValueError):
                 return False
 
@@ -184,7 +183,7 @@ class ScheduleJob(BaseScheduleJob):
                 months=0 if self.year else (self.month or 0),
                 hours=self.hour or 0,
                 minutes=self.minute or 0,
-                weekday=weekday if not self._last_executed else None,
+                weekday=None if self._last_executed else weekday,
             )
             # start a new day
             if next_timestamp.day != prev_timestamp.day:
@@ -319,7 +318,7 @@ class BaseScheduler(object):
                     self._deserialize()
                     self._update_execution_plots()
             except Exception as ex:
-                self._log('Warning: Exception caught during deserialization: {}'.format(ex))
+                self._log(f'Warning: Exception caught during deserialization: {ex}')
                 self._last_sync = time()
 
             try:
@@ -327,13 +326,15 @@ class BaseScheduler(object):
                     self._serialize_state()
                     self._update_execution_plots()
             except Exception as ex:
-                self._log('Warning: Exception caught during scheduling step: {}'.format(ex))
+                self._log(f'Warning: Exception caught during scheduling step: {ex}')
                 # rate control
                 sleep(15)
 
             # sleep until the next pool (default None)
             if self._pooling_frequency_minutes:
-                self._log("Sleeping until the next pool in {} minutes".format(self._pooling_frequency_minutes))
+                self._log(
+                    f"Sleeping until the next pool in {self._pooling_frequency_minutes} minutes"
+                )
                 sleep(self._pooling_frequency_minutes*60.)
 
     def start_remotely(self, queue='services'):
@@ -410,9 +411,8 @@ class BaseScheduler(object):
             t = Task.get_task(task_id=job.get_last_executed_task_id())
             if t.status in ('in_progress', 'queued'):
                 self._log(
-                    'Skipping Task {} scheduling, previous Task instance {} still running'.format(
-                        job.name, t.id
-                    ))
+                    f'Skipping Task {job.name} scheduling, previous Task instance {t.id} still running'
+                )
                 job.run(None)
                 return None
 
@@ -426,8 +426,9 @@ class BaseScheduler(object):
             target_project=job.target_project,
             tags=[add_tags] if add_tags and isinstance(add_tags, str) else add_tags,
         )
-        self._log('Scheduling Job {}, Task {} on queue {}.'.format(
-            job.name, task_job.task_id(), job.queue))
+        self._log(
+            f'Scheduling Job {job.name}, Task {task_job.task_id()} on queue {job.queue}.'
+        )
         if task_job.launch(queue_name=job.queue):
             # mark as run
             job.run(task_job.task_id())
@@ -451,14 +452,14 @@ class BaseScheduler(object):
 
             if a_thread and a_thread.is_alive():
                 self._log(
-                    "Skipping Task '{}' scheduling, previous Thread instance '{}' still running".format(
-                        job.name, a_thread.ident
-                    ))
+                    f"Skipping Task '{job.name}' scheduling, previous Thread instance '{a_thread.ident}' still running"
+                )
                 job.run(None)
                 return None
 
-        self._log("Scheduling Job '{}', Task '{}' on background thread".format(
-            job.name, job.base_function))
+        self._log(
+            f"Scheduling Job '{job.name}', Task '{job.base_function}' on background thread"
+        )
         t = Thread(target=job.base_function, args=func_args or ())
         t.start()
         # mark as run
@@ -639,12 +640,12 @@ class TaskScheduler(BaseScheduler):
         """
         if isinstance(task_id, (Task, str)):
             task_id = task_id.id if isinstance(task_id, Task) else str(task_id)
-            if not any(t.base_task_id == task_id for t in self._schedule_jobs):
+            if all(t.base_task_id != task_id for t in self._schedule_jobs):
                 return False
             self._schedule_jobs = [t for t in self._schedule_jobs if t.base_task_id != task_id]
+        elif all(t.base_function != task_id for t in self._schedule_jobs):
+            return False
         else:
-            if not any(t.base_function == task_id for t in self._schedule_jobs):
-                return False
             self._schedule_jobs = [t for t in self._schedule_jobs if t.base_function != task_id]
         return True
 
@@ -680,7 +681,7 @@ class TaskScheduler(BaseScheduler):
         next_time_stamp = scheduled_jobs[0].next_run() if scheduled_jobs else None
         if timeout_jobs:
             next_time_stamp = min(timeout_jobs[0], next_time_stamp) \
-                if next_time_stamp else timeout_jobs[0]
+                    if next_time_stamp else timeout_jobs[0]
 
         sleep_time = (next_time_stamp - datetime.utcnow()).total_seconds()
         if sleep_time > 0:
@@ -692,13 +693,13 @@ class TaskScheduler(BaseScheduler):
 
         # check if this is a Task timeout check
         if timeout_jobs and next_time_stamp == timeout_jobs[0]:
-            self._log('Aborting timeout job: {}'.format(timeout_jobs[0]))
+            self._log(f'Aborting timeout job: {timeout_jobs[0]}')
             # mark aborted
             task_id = [k for k, v in self._timeout_jobs.items() if v == timeout_jobs[0]][0]
             self._cancel_task(task_id=task_id)
             self._timeout_jobs.pop(task_id, None)
         else:
-            self._log('Launching job: {}'.format(scheduled_jobs[0]))
+            self._log(f'Launching job: {scheduled_jobs[0]}')
             self._launch_job(scheduled_jobs[0])
 
         return True
@@ -778,7 +779,7 @@ class TaskScheduler(BaseScheduler):
                 current_jobs=self._schedule_jobs
             )
         except Exception as ex:
-            self._log('Failed deserializing configuration: {}'.format(ex), level=logging.WARN)
+            self._log(f'Failed deserializing configuration: {ex}', level=logging.WARN)
             return
 
     @staticmethod
@@ -811,9 +812,11 @@ class TaskScheduler(BaseScheduler):
         if not self._task:
             return
 
-        task_link_template = self._task.get_output_log_web_page() \
-            .replace('/{}/'.format(self._task.project), '/{project}/') \
-            .replace('/{}/'.format(self._task.id), '/{task}/')
+        task_link_template = (
+            self._task.get_output_log_web_page()
+            .replace(f'/{self._task.project}/', '/{project}/')
+            .replace(f'/{self._task.id}/', '/{task}/')
+        )
 
         # plot the schedule definition
         columns = [
@@ -826,10 +829,11 @@ class TaskScheduler(BaseScheduler):
         for j in self._schedule_jobs:
             j_dict = j.to_dict()
             j_dict['next_run'] = j.next()
-            j_dict['base_function'] = "{}.{}".format(
-                getattr(j.base_function, '__module__', ''),
-                getattr(j.base_function, '__name__', '')
-            ) if j.base_function else ''
+            j_dict['base_function'] = (
+                f"{getattr(j.base_function, '__module__', '')}.{getattr(j.base_function, '__name__', '')}"
+                if j.base_function
+                else ''
+            )
 
             if not j_dict.get('base_task_id'):
                 j_dict['clone_task'] = ''

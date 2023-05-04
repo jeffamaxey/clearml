@@ -35,9 +35,7 @@ class ApiServiceProxy(object):
             version = [str(v) for v in ApiServiceProxy._available_versions if Session.check_min_api_version(v)][-1]
             Session.api_version = version
             self.__dict__["__wrapped_version__"] = Session.api_version
-            name = ".v{}.{}".format(
-                version.replace(".", "_"), self.__dict__.get("__wrapped_name__")
-            )
+            name = f'.v{version.replace(".", "_")}.{self.__dict__.get("__wrapped_name__")}'
             self.__dict__["__wrapped__"] = self._import_module(name, self._main_services_module)
 
         return getattr(self.__dict__["__wrapped__"], attr)
@@ -63,7 +61,7 @@ class ExtApiServiceProxy(ApiServiceProxy):
                 pass
 
         raise ImportError(
-            "No module '{}' in all predefined services module paths".format(name)
+            f"No module '{name}' in all predefined services module paths"
         )
 
     @classmethod
@@ -80,6 +78,5 @@ class ExtApiServiceProxy(ApiServiceProxy):
         Paths are yielded in reverse order, so that users can add a services module that will override
         the built-in main service module path (e.g. in case a type defined in the built-in module was redefined)
         """
-        for path in reversed(self._extra_services_modules):
-            yield path
+        yield from reversed(self._extra_services_modules)
         yield self._main_services_module

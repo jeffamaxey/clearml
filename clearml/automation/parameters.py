@@ -80,10 +80,14 @@ class Parameter(RandomSeed):
 
         :return:  dict representation of the object (serialization).
         """
-        serialize = {self._class_type_serialize_name: str(self.__class__).split('.')[-1][:-2]}
-        # noinspection PyCallingNonCallable
-        serialize.update(dict(((k, v.to_dict() if hasattr(v, 'to_dict') else v) for k, v in self.__dict__.items())))
-        return serialize
+        return {
+            self._class_type_serialize_name: str(self.__class__).split('.')[-1][
+                :-2
+            ]
+        } | {
+            k: v.to_dict() if hasattr(v, 'to_dict') else v
+            for k, v in self.__dict__.items()
+        }
 
     @classmethod
     def from_dict(cls, a_dict):
@@ -102,9 +106,12 @@ class Parameter(RandomSeed):
         except AttributeError:
             return None
         instance = a_cls.__new__(a_cls)
-        instance.__dict__ = dict(
-            (k, cls.from_dict(v) if isinstance(v, dict) and cls._class_type_serialize_name in v else v)
-            for k, v in a_dict.items())
+        instance.__dict__ = {
+            k: cls.from_dict(v)
+            if isinstance(v, dict) and cls._class_type_serialize_name in v
+            else v
+            for k, v in a_dict.items()
+        }
         return instance
 
 
@@ -254,9 +261,13 @@ class UniformIntegerParameterRange(Parameter):
 
         :return: {self.name: random value [self.min_value, self.max_value)}
         """
-        return {self.name: self._random.randrange(
-            start=self.min_value, step=self.step_size,
-            stop=self.max_value + (0 if not self.include_max else self.step_size))}
+        return {
+            self.name: self._random.randrange(
+                start=self.min_value,
+                step=self.step_size,
+                stop=self.max_value + (self.step_size if self.include_max else 0),
+            )
+        }
 
     def to_list(self):
         # type: () -> Sequence[Mapping[str, int]]
@@ -354,16 +365,18 @@ class ParameterSet(Parameter):
         """
         combinations = []
         for combination in self.values:
-            single_option = {}
-            for k, v in combination.items():
-                if isinstance(v, Parameter):
-                    single_option[k] = v.to_list()
-                else:
-                    single_option[k] = [{k: v}, ]
-
-            for state in product(*single_option.values()):
-                combinations.append(dict(kv for d in state for kv in d.items()))
-
+            single_option = {
+                k: v.to_list()
+                if isinstance(v, Parameter)
+                else [
+                    {k: v},
+                ]
+                for k, v in combination.items()
+            }
+            combinations.extend(
+                dict(kv for d in state for kv in d.items())
+                for state in product(*single_option.values())
+            )
         return combinations
 
     @staticmethod
@@ -372,7 +385,7 @@ class ParameterSet(Parameter):
         value_dict = {}
         for k, v in combination.items():
             if isinstance(v, Parameter):
-                value_dict.update(v.get_value())
+                value_dict |= v.get_value()
             else:
                 value_dict[k] = v
 

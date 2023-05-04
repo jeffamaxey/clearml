@@ -97,7 +97,7 @@ class CreateAndPopulate(object):
             if not script:
                 raise ValueError("Entry point script not provided")
             if not repo and not folder and not Path(script).is_file():
-                raise ValueError("Script file \'{}\' could not be found".format(script))
+                raise ValueError(f"Script file \'{script}\' could not be found")
         if raise_on_missing_entries and commit and branch:
             raise ValueError(
                 "Specify either a branch/tag or specific commit id, not both (either --commit or --branch)")
@@ -115,7 +115,7 @@ class CreateAndPopulate(object):
         self.cwd = working_directory
         assert not packages or isinstance(packages, (tuple, list, bool))
         self.packages = list(packages) if packages is not None and not isinstance(packages, bool) \
-            else (packages or None)
+                else (packages or None)
         self.requirements_file = Path(requirements_file) if requirements_file else None
         self.base_task_id = base_task_id
         self.docker = dict(image=docker, args=docker_args, bash_script=docker_bash_setup_script)

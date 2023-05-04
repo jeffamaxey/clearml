@@ -39,10 +39,7 @@ class Builder(object):
         return self.types_builders[type]
 
     def count_type(self, type):
-        if self.parent:
-            return self.parent.count_type(type)
-
-        return self.types_count[type]
+        return self.parent.count_type(type) if self.parent else self.types_count[type]
 
     @staticmethod
     def maybe_build(value):
@@ -73,12 +70,11 @@ class ObjectBuilder(Builder):
 
     def build(self):
         builder = self.get_builder(self.type)
-        if self.is_definition and not self.is_root:
-            self.add_definition(builder)
-            [self.maybe_build(value) for _, value in self.properties.items()]
-            return '#/definitions/{name}'.format(name=self.type_name)
-        else:
+        if not self.is_definition or self.is_root:
             return builder.build_definition(nullable=self.nullable)
+        self.add_definition(builder)
+        [self.maybe_build(value) for _, value in self.properties.items()]
+        return '#/definitions/{name}'.format(name=self.type_name)
 
     @property
     def type_name(self):
@@ -89,11 +85,10 @@ class ObjectBuilder(Builder):
         return module_name.replace('.', '_').lower()
 
     def build_definition(self, add_defintitions=True, nullable=False):
-        properties = dict(
-            (name, self.maybe_build(value))
-            for name, value
-            in self.properties.items()
-        )
+        properties = {
+            name: self.maybe_build(value)
+            for name, value in self.properties.items()
+        }
         schema = {
             'type': 'object',
             'additionalProperties': False,
@@ -102,10 +97,10 @@ class ObjectBuilder(Builder):
         if self.required:
             schema['required'] = self.required
         if self.definitions and add_defintitions:
-            schema['definitions'] = dict(
-                (builder.type_name, builder.build_definition(False, False))
+            schema['definitions'] = {
+                builder.type_name: builder.build_definition(False, False)
                 for builder in self.definitions
-            )
+            }
         return schema
 
     @property
@@ -137,7 +132,6 @@ class PrimitiveBuilder(Builder):
         self.type = type
 
     def build(self):
-        schema = {}
         if issubclass(self.type, six.string_types):
             obj_type = 'string'
         elif issubclass(self.type, bool):
@@ -153,8 +147,7 @@ class PrimitiveBuilder(Builder):
 
         if self.nullable:
             obj_type = [obj_type, 'null']
-        schema['type'] = obj_type
-
+        schema = {'type': obj_type}
         if self.has_default:
             schema["default"] = self.default
 
@@ -179,11 +172,7 @@ class ListBuilder(Builder):
             schema["default"] = [self.to_struct(i) for i in self.default]
 
         schemas = [self.maybe_build(s) for s in self.schemas]
-        if len(schemas) == 1:
-            items = schemas[0]
-        else:
-            items = {'oneOf': schemas}
-
+        items = schemas[0] if len(schemas) == 1 else {'oneOf': schemas}
         schema['items'] = items
         return schema
 
@@ -194,9 +183,7 @@ class ListBuilder(Builder):
     @staticmethod
     def to_struct(item):
         from .models import Base
-        if isinstance(item, Base):
-            return item.to_struct()
-        return item
+        return item.to_struct() if isinstance(item, Base) else item
 
 
 class EmbeddedBuilder(Builder):
@@ -213,11 +200,7 @@ class EmbeddedBuilder(Builder):
             self.add_type_schema({'type': 'null'})
 
         schemas = [self.maybe_build(schema) for schema in self.schemas]
-        if len(schemas) == 1:
-            schema = schemas[0]
-        else:
-            schema = {'oneOf': schemas}
-
+        schema = schemas[0] if len(schemas) == 1 else {'oneOf': schemas}
         if self.has_default:
             # The default value of EmbeddedField is expected to be an instance
             # of a subclass of models.Base, thus have `to_struct`

@@ -93,8 +93,11 @@ class PipelineController(object):
             """
             new_copy = PipelineController.Node(
                 name=self.name,
-                **dict((k, deepcopy(v)) for k, v in self.__dict__.items()
-                       if k not in ('name', 'job', 'executed', 'task_factory_func'))
+                **{
+                    k: deepcopy(v)
+                    for k, v in self.__dict__.items()
+                    if k not in ('name', 'job', 'executed', 'task_factory_func')
+                }
             )
             new_copy.task_factory_func = self.task_factory_func
             return new_copy
@@ -148,9 +151,9 @@ class PipelineController(object):
                 "examples: version='1.0.1', version='1.2', version='23'")
         self._pool_frequency = pool_frequency * 60.
         self._thread = None
-        self._pipeline_args = dict()
-        self._pipeline_args_desc = dict()
-        self._pipeline_args_type = dict()
+        self._pipeline_args = {}
+        self._pipeline_args_desc = {}
+        self._pipeline_args_type = {}
         self._stop_event = None
         self._experiment_created_cb = None
         self._experiment_completed_cb = None
@@ -166,10 +169,10 @@ class PipelineController(object):
         self._mock_execution = False  # used for nested pipelines (eager execution)
         self._pipeline_as_sub_project = bool(Session.check_min_api_server_version("2.17"))
         if not self._task:
-            task_name = name or project or '{}'.format(datetime.now())
+            task_name = name or project or f'{datetime.now()}'
             if self._pipeline_as_sub_project:
-                parent_project = "{}.pipelines".format(project+'/' if project else '')
-                project_name = "{}/{}".format(parent_project, task_name)
+                parent_project = f"{f'{project}/' if project else ''}.pipelines"
+                project_name = f"{parent_project}/{task_name}"
             else:
                 parent_project = None
                 project_name = project or 'Pipelines'
@@ -204,12 +207,8 @@ class PipelineController(object):
             if add_run_number and self._task.running_locally():
                 self._add_pipeline_name_run_number()
             # noinspection PyProtectedMember
-            self._task.get_logger().report_text('ClearML pipeline page: {}'.format(
-                '{}/pipelines/{}/experiments/{}'.format(
-                    self._task._get_app_server(),
-                    self._task.project if self._task.project is not None else '*',
-                    self._task.id,
-                ))
+            self._task.get_logger().report_text(
+                f"ClearML pipeline page: {self._task._get_app_server()}/pipelines/{self._task.project if self._task.project is not None else '*'}/experiments/{self._task.id}"
             )
 
     def set_default_execution_queue(self, default_execution_queue):
@@ -402,20 +401,25 @@ class PipelineController(object):
                 )
             )
             if not base_task:
-                raise ValueError('Could not find base_task_project={} base_task_name={}'.format(
-                    base_task_project, base_task_name))
+                raise ValueError(
+                    f'Could not find base_task_project={base_task_project} base_task_name={base_task_name}'
+                )
             if Task.archived_tag in base_task.get_system_tags():
                 LoggerRoot.get_base_logger().warning(
-                    'Found base_task_project={} base_task_name={} but it is archived'.format(
-                        base_task_project, base_task_name))
+                    f'Found base_task_project={base_task_project} base_task_name={base_task_name} but it is archived'
+                )
             base_task_id = base_task.id
 
-        if configuration_overrides is not None:
-            # verify we have a dict or a string on all values
-            if not isinstance(configuration_overrides, dict) or \
-                    not all(isinstance(v, (str, dict)) for v in configuration_overrides.values()):
-                raise ValueError("configuration_overrides must be a dictionary, with all values "
-                                 "either dicts or strings, got \'{}\' instead".format(configuration_overrides))
+        if configuration_overrides is not None and (
+            not isinstance(configuration_overrides, dict)
+            or not all(
+                isinstance(v, (str, dict))
+                for v in configuration_overrides.values()
+            )
+        ):
+            raise ValueError(
+                f"configuration_overrides must be a dictionary, with all values either dicts or strings, got \'{configuration_overrides}\' instead"
+            )
 
         if task_overrides:
             task_overrides = flatten_dictionary(task_overrides, sep='.')
@@ -660,7 +664,7 @@ class PipelineController(object):
             # load task definition from configuration
             # noinspection PyProtectedMember
             config_text = self._task._get_configuration_text(name=name)
-            task_definition = json.loads(config_text) if config_text else dict()
+            task_definition = json.loads(config_text) if config_text else {}
 
         def _create_task(_):
             a_task = Task.create(
@@ -966,10 +970,7 @@ class PipelineController(object):
         _thread = self._thread
 
         _thread.join(timeout=timeout)
-        if _thread.is_alive():
-            return False
-
-        return True
+        return not _thread.is_alive()
 
     def is_running(self):
         # type: () -> bool
@@ -996,9 +997,7 @@ class PipelineController(object):
 
         :return: The minutes from controller start time. A negative value means the process has not started yet.
         """
-        if self._start_time is None:
-            return -1.0
-        return (time() - self._start_time) / 60.
+        return -1.0 if self._start_time is None else (time() - self._start_time) / 60.
 
     def get_pipeline_dag(self):
         # type: () -> Mapping[str, PipelineController.Node]
@@ -1085,7 +1084,7 @@ class PipelineController(object):
             auto_connect_frameworks, auto_connect_arg_parser,
             packages, project_name, task_name, task_type, repo, branch, commit, helper_functions
     ):
-        task_definition = CreateFromFunction.create_task_from_function(
+        return CreateFromFunction.create_task_from_function(
             a_function=function,
             function_kwargs=function_kwargs or None,
             function_input_artifacts=function_input_artifacts,
@@ -1106,7 +1105,6 @@ class PipelineController(object):
             helper_functions=helper_functions,
             dry_run=True,
         )
-        return task_definition
 
     def _start(
             self,
@@ -1225,7 +1223,10 @@ class PipelineController(object):
                 pipeline_args = flatten_dictionary(self._pipeline_args)
                 # noinspection PyProtectedMember
                 self._task._set_parameters(
-                    {'{}/{}'.format(self._args_section, k): v for k, v in pipeline_args.items()},
+                    {
+                        f'{self._args_section}/{k}': v
+                        for k, v in pipeline_args.items()
+                    },
                     __parameters_descriptions=self._pipeline_args_desc,
                     __parameters_types=self._pipeline_args_type,
                     __update=True,
@@ -1241,9 +1242,11 @@ class PipelineController(object):
                 pipeline_hash = self._get_task_hash()
 
                 # noinspection PyProtectedMember
-                self._task._set_runtime_properties({
-                    self._runtime_property_hash: "{}:{}".format(pipeline_hash, self._version),
-                })
+                self._task._set_runtime_properties(
+                    {
+                        self._runtime_property_hash: f"{pipeline_hash}:{self._version}"
+                    }
+                )
             else:
                 self._task.connect_configuration(pipeline_dag, name=self._config_section)
                 self._task.connect(self._pipeline_args, name=self._args_section)
@@ -1255,9 +1258,11 @@ class PipelineController(object):
                     # noinspection PyProtectedMember
                     pipeline_hash = ClearmlJob._create_task_hash(self._task)
                     # noinspection PyProtectedMember
-                    self._task._set_runtime_properties({
-                        self._runtime_property_hash: "{}:{}".format(pipeline_hash, self._version),
-                    })
+                    self._task._set_runtime_properties(
+                        {
+                            self._runtime_property_hash: f"{pipeline_hash}:{self._version}"
+                        }
+                    )
                     params['continue_pipeline'] = False
 
         return params, pipeline_dag
@@ -1270,34 +1275,36 @@ class PipelineController(object):
 
         # check if pipeline version exists, if it does increase version
         pipeline_hash = self._get_task_hash()
-        # noinspection PyProtectedMember
-        existing_tasks = Task._query_tasks(
-            project=[self._task.project], task_name=exact_match_regex(self._task.name),
+        if existing_tasks := Task._query_tasks(
+            project=[self._task.project],
+            task_name=exact_match_regex(self._task.name),
             type=[str(self._task.task_type)],
-            system_tags=['-{}'.format(Task.archived_tag), self._tag],
-            _all_=dict(fields=['runtime.{}'.format(self._runtime_property_hash)],
-                       pattern=":{}".format(self._version)),
+            system_tags=[f'-{Task.archived_tag}', self._tag],
+            _all_=dict(
+                fields=[f'runtime.{self._runtime_property_hash}'],
+                pattern=f":{self._version}",
+            ),
             only_fields=['id', 'runtime'],
-        )
-        if existing_tasks:
+        ):
             # check if hash match the current version.
             matched = True
             for t in existing_tasks:
                 h, _, v = t.runtime.get(self._runtime_property_hash, '').partition(':')
                 if v == self._version:
-                    matched = bool(h == pipeline_hash)
+                    matched = h == pipeline_hash
                     break
             # if hash did not match, look for the highest version
             if not matched:
                 # noinspection PyProtectedMember
                 existing_tasks = Task._query_tasks(
-                    project=[self._task.project], task_name=exact_match_regex(self._task.name),
+                    project=[self._task.project],
+                    task_name=exact_match_regex(self._task.name),
                     type=[str(self._task.task_type)],
-                    system_tags=['-{}'.format(Task.archived_tag), self._tag],
+                    system_tags=[f'-{Task.archived_tag}', self._tag],
                     only_fields=['id', 'hyperparams', 'runtime'],
                 )
                 found_match_version = False
-                existing_versions = set([self._version])  # noqa
+                existing_versions = {self._version}
                 for t in existing_tasks:
                     # exclude ourselves
                     if t.id == self._task.id:
@@ -1317,7 +1324,8 @@ class PipelineController(object):
                 # match to the version we found:
                 if found_match_version:
                     getLogger('clearml.automation.controller').info(
-                        'Existing Pipeline found, matching version to: {}'.format(self._version))
+                        f'Existing Pipeline found, matching version to: {self._version}'
+                    )
                 else:
                     # if we did not find a matched pipeline version, get the max one and bump the version by 1
                     while True:
@@ -1327,7 +1335,8 @@ class PipelineController(object):
                             break
 
                     getLogger('clearml.automation.controller').info(
-                        'No matching Pipelines found, bump new version to: {}'.format(self._version))
+                        f'No matching Pipelines found, bump new version to: {self._version}'
+                    )
 
             self._task.set_user_properties(version=self._version)
 
@@ -1352,13 +1361,11 @@ class PipelineController(object):
         # store as text so we can hash it later
         configurations_override[self._config_section] = json.dumps(dag)
 
-        # noinspection PyProtectedMember
-        pipeline_hash = ClearmlJob._create_task_hash(
+        return ClearmlJob._create_task_hash(
             self._task,
             params_override=params_override,
             configurations_override=configurations_override,
         )
-        return pipeline_hash
 
     def _serialize(self):
         # type: () -> dict
@@ -1368,9 +1375,14 @@ class PipelineController(object):
         :return:
         """
         nodes_items = list(self._nodes.items())
-        dag = {name: dict((k, v) for k, v in node.__dict__.items()
-                          if k not in ('job', 'name', 'task_factory_func'))
-               for name, node in nodes_items}
+        dag = {
+            name: {
+                k: v
+                for k, v in node.__dict__.items()
+                if k not in ('job', 'name', 'task_factory_func')
+            }
+            for name, node in nodes_items
+        }
         # update state for presentation only
         for name, node in nodes_items:
             dag[name]['job_id'] = node.executed or (node.job.task_id() if node.job else None)
@@ -1423,10 +1435,7 @@ class PipelineController(object):
             self._verify_node(node)
 
         # check the dag itself
-        if not self._verify_dag():
-            return False
-
-        return True
+        return bool(self._verify_dag())
 
     def _verify_node(self, node):
         # type: (PipelineController.Node) -> bool
@@ -1526,9 +1535,8 @@ class PipelineController(object):
                 if any(p == node.name for p in node.parents or []):
                     # node cannot have itself as parent
                     return False
-                if not all(p in visited for p in node.parents or []):
-                    continue
-                visited.add(k)
+                if all(p in visited for p in node.parents or []):
+                    visited.add(k)
         # return False if we did not cover all the nodes
         return not bool(set(self._nodes.keys()) - visited)
 
@@ -1547,19 +1555,19 @@ class PipelineController(object):
             node.job_type = None
 
         if node.job or node.executed:
-            print('Skipping cached/executed step [{}]'.format(node.name))
+            print(f'Skipping cached/executed step [{node.name}]')
             return False
 
-        print('Launching step [{}]'.format(node.name))
+        print(f'Launching step [{node.name}]')
 
-        updated_hyper_parameters = {}
-        for k, v in node.parameters.items():
-            updated_hyper_parameters[k] = self._parse_step_ref(v)
-
+        updated_hyper_parameters = {
+            k: self._parse_step_ref(v) for k, v in node.parameters.items()
+        }
         task_overrides = self._parse_task_overrides(node.task_overrides) if node.task_overrides else None
 
-        extra_args = dict()
-        extra_args['project'] = self._get_target_project(return_project_id=True) or None
+        extra_args = {
+            'project': self._get_target_project(return_project_id=True) or None
+        }
         # set Task name to match job name
         if self._pipeline_as_sub_project:
             extra_args['name'] = node.name
@@ -1586,13 +1594,14 @@ class PipelineController(object):
                 base_task_id=task_id,
                 parameter_override=updated_hyper_parameters,
                 configuration_overrides=node.configurations,
-                tags=['{} {}'.format(self._node_tag_prefix, self._task.id)]
-                if self._add_pipeline_tags and self._task else None,
+                tags=[f'{self._node_tag_prefix} {self._task.id}']
+                if self._add_pipeline_tags and self._task
+                else None,
                 parent=self._task.id if self._task else None,
                 disable_clone_task=disable_clone_task,
                 task_overrides=task_overrides,
                 allow_caching=node.cache_executed_step,
-                **extra_args
+                **extra_args,
             )
         except Exception:
             self._pipeline_task_status_failed = True
@@ -1608,7 +1617,8 @@ class PipelineController(object):
         if skip_node is False:
             # skipping node
             getLogger('clearml.automation.controller').warning(
-                'Skipping node {} on callback request'.format(node))
+                f'Skipping node {node} on callback request'
+            )
             # delete the job we just created
             node.job.delete()
             node.skip_job = True
@@ -1660,7 +1670,7 @@ class PipelineController(object):
         while nodes:
             next_nodes = []
             for node in nodes:
-                if not all(p in visited for p in node.parents or []):
+                if any(p not in visited for p in node.parents or []):
                     next_nodes.append(node)
                     continue
                 visited.append(node.name)
@@ -1674,9 +1684,12 @@ class PipelineController(object):
                 # sankey_node['customdata'].append(
                 #     '<br />'.join('{}: {}'.format(k, v) for k, v in (node.parameters or {}).items()))
                 sankey_node['label'].append(
-                    '{}<br />'.format(node.name) +
-                    '<br />'.join('{}: {}'.format(k, v if len(str(v)) < 24 else (str(v)[:24]+' ...'))
-                                  for k, v in (node.parameters or {}).items()))
+                    f'{node.name}<br />'
+                    + '<br />'.join(
+                        f"{k}: {v if len(str(v)) < 24 else f'{str(v)[:24]} ...'}"
+                        for k, v in (node.parameters or {}).items()
+                    )
+                )
 
                 sankey_node['color'].append(self._get_node_color(node))
 
@@ -1687,11 +1700,11 @@ class PipelineController(object):
 
             nodes = next_nodes
 
-        # make sure we have no independent (unconnected) nodes
-        single_nodes = []
-        for i in [n for n in range(len(visited)) if n not in sankey_link['source'] and n not in sankey_link['target']]:
-            single_nodes.append(i)
-
+        single_nodes = [
+            n
+            for n in range(len(visited))
+            if n not in sankey_link['source'] and n not in sankey_link['target']
+        ]
         # create the sankey graph
         dag_flow = dict(
             link=sankey_link,
@@ -1753,9 +1766,11 @@ class PipelineController(object):
         :param visited: list of nodes
         :return: Table as List of List of strings (cell)
         """
-        task_link_template = self._task.get_output_log_web_page() \
-            .replace('/{}/'.format(self._task.project), '/{project}/') \
-            .replace('/{}/'.format(self._task.id), '/{task}/')
+        task_link_template = (
+            self._task.get_output_log_web_page()
+            .replace(f'/{self._task.project}/', '/{project}/')
+            .replace(f'/{self._task.id}/', '/{task}/')
+        )
 
         table_values = [["Pipeline Step", "Task ID", "Task Name", "Status", "Parameters"]]
 
@@ -1872,9 +1887,11 @@ class PipelineController(object):
         if self._task:
             # noinspection PyProtectedMember
             self._task._set_configuration(
-                name=self._config_section, config_type='dictionary',
-                description="pipeline state: {}".format(hash_dict(pipeline_dag)),
-                config_text=json.dumps(pipeline_dag, indent=2))
+                name=self._config_section,
+                config_type='dictionary',
+                description=f"pipeline state: {hash_dict(pipeline_dag)}",
+                config_text=json.dumps(pipeline_dag, indent=2),
+            )
 
     def _daemon(self):
         # type: () -> ()

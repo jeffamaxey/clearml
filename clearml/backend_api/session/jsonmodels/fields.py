@@ -157,9 +157,7 @@ class IntField(BaseField):
     def parse_value(self, value):
         """Cast value to `int`, e.g. from string or long"""
         parsed = super(IntField, self).parse_value(value)
-        if parsed is None:
-            return parsed
-        return int(parsed)
+        return parsed if parsed is None else int(parsed)
 
 
 class FloatField(BaseField):
@@ -200,9 +198,7 @@ class ListField(BaseField):
 
     def get_default_value(self):
         default = super(ListField, self).get_default_value()
-        if default is None:
-            return ModelCollection(self)
-        return default
+        return ModelCollection(self) if default is None else default
 
     def _assign_types(self, items_types):
         if items_types:
@@ -249,23 +245,23 @@ class ListField(BaseField):
         if not values:
             return result
 
-        if not isinstance(values, list):
-            return values
-
-        return [self._cast_value(value) for value in values]
+        return (
+            [self._cast_value(value) for value in values]
+            if isinstance(values, list)
+            else values
+        )
 
     def _cast_value(self, value):
         if isinstance(value, self.items_types):
             return value
-        else:
-            if len(self.items_types) != 1:
-                tpl = 'Cannot decide which type to choose from "{types}".'
-                raise ValidationError(
-                    tpl.format(
-                        types=', '.join([t.__name__ for t in self.items_types])
-                    )
+        if len(self.items_types) != 1:
+            tpl = 'Cannot decide which type to choose from "{types}".'
+            raise ValidationError(
+                tpl.format(
+                    types=', '.join([t.__name__ for t in self.items_types])
                 )
-            return self.items_types[0](**value)
+            )
+        return self.items_types[0](**value)
 
     def _finish_initialization(self, owner):
         super(ListField, self)._finish_initialization(owner)
@@ -380,7 +376,7 @@ def _get_modules(relative_path, base_module):
     parent_modules = base_module.split('.')
     parents_amount = max(0, parents_amount - 1)
     if parents_amount > len(parent_modules):
-        raise ValueError("Can't evaluate path '{}'".format(relative_path))
+        raise ValueError(f"Can't evaluate path '{relative_path}'")
     return parent_modules[:parents_amount * -1] + canonical_modules
 
 
@@ -389,8 +385,7 @@ def _import(module_name, type_name):
     try:
         return getattr(module, type_name)
     except AttributeError:
-        raise ValueError(
-            "Can't find type '{}.{}'.".format(module_name, type_name))
+        raise ValueError(f"Can't find type '{module_name}.{type_name}'.")
 
 
 class TimeField(StringField):
@@ -419,9 +414,7 @@ class TimeField(StringField):
         """Parse string into instance of `time`."""
         if value is None:
             return value
-        if isinstance(value, datetime.time):
-            return value
-        return parse(value).timetz()
+        return value if isinstance(value, datetime.time) else parse(value).timetz()
 
 
 class DateField(StringField):
@@ -451,9 +444,7 @@ class DateField(StringField):
         """Parse string into instance of `date`."""
         if value is None:
             return value
-        if isinstance(value, datetime.date):
-            return value
-        return parse(value).date()
+        return value if isinstance(value, datetime.date) else parse(value).date()
 
 
 class DateTimeField(StringField):
@@ -482,7 +473,4 @@ class DateTimeField(StringField):
         """Parse string into instance of `datetime`."""
         if isinstance(value, datetime.datetime):
             return value
-        if value:
-            return parse(value)
-        else:
-            return None
+        return parse(value) if value else None

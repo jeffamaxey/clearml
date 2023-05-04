@@ -60,7 +60,7 @@ class PatchAbsl(object):
                 return None
         # noinspection PyBroadException
         try:
-            flag = args[0] if len(args) >= 1 else None
+            flag = args[0] if args else None
             module_name = args[2] if len(args) >= 3 else None
             param_name = None
             if flag:
@@ -78,13 +78,10 @@ class PatchAbsl(object):
                     flag.value = param_dict.get(param_name, flag.value)
             except Exception:
                 pass
-            ret = PatchAbsl._original_DEFINE_flag(*args, **kwargs)
-        else:
-            if flag and param_name:
-                value = flag.value
-                PatchAbsl._task.update_parameters({_Arguments._prefix_tf_defines + param_name: value}, )
-            ret = PatchAbsl._original_DEFINE_flag(*args, **kwargs)
-        return ret
+        elif flag and param_name:
+            value = flag.value
+            PatchAbsl._task.update_parameters({_Arguments._prefix_tf_defines + param_name: value}, )
+        return PatchAbsl._original_DEFINE_flag(*args, **kwargs)
 
     @staticmethod
     def _patched_FLAGS_parse_call(self, *args, **kwargs):
@@ -103,7 +100,7 @@ class PatchAbsl(object):
         # noinspection PyBroadException
         try:
             if running_remotely():
-                param_dict = dict((k, FLAGS[k].value) for k in FLAGS)
+                param_dict = {k: FLAGS[k].value for k in FLAGS}
                 param_dict = cls._task._arguments.copy_to_dict(param_dict, prefix=_Arguments._prefix_tf_defines)
                 for k, v in param_dict.items():
                     # noinspection PyBroadException

@@ -54,8 +54,7 @@ class Base(six.with_metaclass(JsonmodelMeta, object)):
 
     def __iter__(self):
         """Iterate through fields and values."""
-        for name, field in self.iterate_over_fields():
-            yield name, field
+        yield from self.iterate_over_fields()
 
     def validate(self):
         """Explicitly validate all the fields."""

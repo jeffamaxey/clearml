@@ -34,9 +34,7 @@ def safe_text_to_bool(value):
 
 def any_to_bool(value):
     # type: (Optional[Union[int, float, Text]]) -> bool
-    if isinstance(value, six.text_type):
-        return text_to_bool(value)
-    return bool(value)
+    return text_to_bool(value) if isinstance(value, six.text_type) else bool(value)
 
 
 def or_(*converters, **kwargs):

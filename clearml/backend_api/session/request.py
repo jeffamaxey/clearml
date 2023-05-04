@@ -20,7 +20,7 @@ class Request(ApiModel):
     def __init__(self, **kwargs):
         allow_extra_fields = kwargs.pop("_allow_extra_fields_", False)
         if not allow_extra_fields and kwargs:
-            raise ValueError('Unsupported keyword arguments: %s' % ', '.join(kwargs.keys()))
+            raise ValueError(f"Unsupported keyword arguments: {', '.join(kwargs.keys())}")
         elif allow_extra_fields and kwargs:
             self._extra_fields = kwargs
         else:

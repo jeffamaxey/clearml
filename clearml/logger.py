@@ -112,9 +112,7 @@ class Logger(object):
         """
         from .task import Task
         task = Task.current_task()
-        if not task:
-            return None
-        return task.get_logger()
+        return task.get_logger() if task else None
 
     def report_text(self, msg, level=logging.INFO, print_console=True, *args, **_):
         # type: (str, int, bool, Any, Any) -> None
@@ -1076,9 +1074,7 @@ class Logger(object):
         :return: True, if successfully flushed the cache. False, if failed.
         """
         self._flush_stdout_handler()
-        if self._task:
-            return self._task.flush(wait_for_uploads=wait)
-        return False
+        return self._task.flush(wait_for_uploads=wait) if self._task else False
 
     def get_flush_period(self):
         # type: () -> Optional[float]
@@ -1087,9 +1083,7 @@ class Logger(object):
 
         :return: The logger flush period in seconds.
         """
-        if self._flusher:
-            return self._flusher.period
-        return None
+        return self._flusher.period if self._flusher else None
 
     def set_flush_period(self, period):
         # type: (float) -> None
@@ -1272,8 +1266,10 @@ class Logger(object):
         try:
             return int(level)
         except (TypeError, ValueError):
-            self._task.log.log(level=logging.ERROR,
-                               msg='Logger failed casting log level "%s" to integer' % str(level))
+            self._task.log.log(
+                level=logging.ERROR,
+                msg=f'Logger failed casting log level "{str(level)}" to integer',
+            )
             return logging.INFO
 
     def _console(self, msg, level=logging.INFO, omit_console=False, force_send=False, *args, **_):
@@ -1311,7 +1307,8 @@ class Logger(object):
                     try:
                         # make sure we are writing to the original stdout
                         StdStreamPatch.stderr_original_write(
-                            'clearml.Logger failed sending log [level {}]: "{}"\n'.format(level, msg))
+                            f'clearml.Logger failed sending log [level {level}]: "{msg}"\n'
+                        )
                     except Exception:
                         pass
             else:
@@ -1328,7 +1325,7 @@ class Logger(object):
                 except Exception:
                     pass
             else:
-                print(str(msg))
+                print(msg)
 
         # if task was not started, we have to start it
         self._start_task_if_needed()

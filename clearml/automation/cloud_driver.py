@@ -125,7 +125,6 @@ class CloudDriver(ABC):
         return bash_script_template.format(
             queue=queue_name,
             worker_prefix=worker_prefix,
-
             auth_token=self.auth_token or '',
             access_key=self.access_key or '',
             api_server=self.api_server,
@@ -133,10 +132,12 @@ class CloudDriver(ABC):
             files_server=self.files_server,
             secret_key=self.secret_key or '',
             web_server=self.web_server,
-
-            bash_script=("export NVIDIA_VISIBLE_DEVICES=none; " if cpu_only else "") + self.extra_vm_bash_script,
+            bash_script=(
+                "export NVIDIA_VISIBLE_DEVICES=none; " if cpu_only else ""
+            )
+            + self.extra_vm_bash_script,
             driver_extra=self.driver_bash_extra(task_id),
-            docker="--docker '{}'".format(self.docker_image) if self.docker_image else "",
+            docker=f"--docker '{self.docker_image}'" if self.docker_image else "",
             instance_id_command=self.instance_id_command(),
         )
 
@@ -152,9 +153,11 @@ class CloudDriver(ABC):
         )
 
     def driver_bash_extra(self, task_id):
-        if not task_id:
-            return ''
-        return 'python -m clearml_agent --config-file ~/clearml.conf execute --id {}'.format(task_id)
+        return (
+            f'python -m clearml_agent --config-file ~/clearml.conf execute --id {task_id}'
+            if task_id
+            else ''
+        )
 
     @classmethod
     def from_config(cls, config):
@@ -182,9 +185,7 @@ class CloudDriver(ABC):
 
     @property
     def logger(self):
-        if self.scaler:
-            return self.scaler.logger
-        return logging.getLogger('AWSDriver')
+        return self.scaler.logger if self.scaler else logging.getLogger('AWSDriver')
 
 
 def parse_tags(s):

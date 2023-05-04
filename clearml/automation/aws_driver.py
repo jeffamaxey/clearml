@@ -147,10 +147,10 @@ class AWSDriver(CloudDriver):
         }
 
         if not self.use_credentials_chain:
-            creds.update({
+            creds |= {
                 'aws_secret_access_key': self.aws_secret_access_key or None,
                 'aws_access_key_id': self.aws_access_key_id or None,
-            })
+            }
         return creds
 
     def instance_id_command(self):
@@ -168,4 +168,4 @@ class AWSDriver(CloudDriver):
             out = ec2.get_console_output(InstanceId=instance_id)
             return out.get('Output', '')
         except ClientError as err:
-            return 'error: cannot get logs for {}:\n{}'.format(instance_id, err)
+            return f'error: cannot get logs for {instance_id}:\n{err}'

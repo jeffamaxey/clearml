@@ -68,7 +68,7 @@ class BaseJob(object):
     def get_metric_req_params(title, series):
         title = hashlib.md5(str(title).encode('utf-8')).hexdigest()
         series = hashlib.md5(str(series).encode('utf-8')).hexdigest()
-        metric = 'last_metrics.{}.{}.'.format(title, series)
+        metric = f'last_metrics.{title}.{series}.'
         values = ['min_value', 'max_value', 'value']
         metrics = [metric + v for v in values]
         return metrics, title, series, values
@@ -88,7 +88,7 @@ class BaseJob(object):
             Task.enqueue(task=self.task, queue_name=queue_name)
             return True
         except Exception as ex:
-            logger.warning('Error enqueuing Task {} to {}: {}'.format(self.task, queue_name, ex))
+            logger.warning(f'Error enqueuing Task {self.task} to {queue_name}: {ex}')
         return False
 
     def abort(self):
@@ -120,9 +120,14 @@ class BaseJob(object):
         self.task_started = True
         if not self.task.data.started:
             self.task.reload()
-            if not self.task.data.started:
-                return -1
-        return (datetime.now(tz=self.task.data.started.tzinfo) - self.task.data.started).total_seconds()
+        return (
+            (
+                datetime.now(tz=self.task.data.started.tzinfo)
+                - self.task.data.started
+            ).total_seconds()
+            if self.task.data.started
+            else -1
+        )
 
     def iterations(self):
         # type: () -> int
@@ -351,7 +356,7 @@ class BaseJob(object):
         # because default docker image will cause the step to change
         docker = None
         if hasattr(task.data, 'container'):
-            docker = dict(**(task.data.container or dict()))
+            docker = dict(**task.data.container or {})
             docker.pop('image', None)
 
         hash_func = 'md5' if Session.check_min_api_version('2.13') else 'crc32'
@@ -382,22 +387,26 @@ class BaseJob(object):
             # noinspection PyProtectedMember
             potential_tasks = Task._query_tasks(
                 status=['completed', 'published'],
-                system_tags=['-{}'.format(Task.archived_tag)],
-                _all_=dict(fields=['runtime.{}'.format(cls._job_hash_property)],
-                           pattern=exact_match_regex(task_hash)),
+                system_tags=[f'-{Task.archived_tag}'],
+                _all_=dict(
+                    fields=[f'runtime.{cls._job_hash_property}'],
+                    pattern=exact_match_regex(task_hash),
+                ),
                 only_fields=['id'],
             )
         else:
             # noinspection PyProtectedMember
             potential_tasks = Task._query_tasks(
                 status=['completed', 'published'],
-                system_tags=['-{}'.format(Task.archived_tag)],
-                _all_=dict(fields=['comment'], pattern=cls._job_hash_description.format(task_hash)),
+                system_tags=[f'-{Task.archived_tag}'],
+                _all_=dict(
+                    fields=['comment'],
+                    pattern=cls._job_hash_description.format(task_hash),
+                ),
                 only_fields=['id'],
             )
         for obj in potential_tasks:
-            task = Task.get_task(task_id=obj.id)
-            return task
+            return Task.get_task(task_id=obj.id)
         return None
 
     @classmethod
@@ -464,8 +473,9 @@ class ClearmlJob(BaseJob):
             self.task = base_temp_task
             task_status = self.task.status
             if task_status != Task.TaskStatusEnum.created:
-                logger.warning('Task cloning disabled but requested Task [{}] status={}. '
-                               'Reverting to clone Task'.format(base_task_id, task_status))
+                logger.warning(
+                    f'Task cloning disabled but requested Task [{base_task_id}] status={task_status}. Reverting to clone Task'
+                )
                 disable_clone_task = False
                 self.task = None
             elif parent:
@@ -485,8 +495,9 @@ class ClearmlJob(BaseJob):
             task_configurations = deepcopy(base_temp_task.data.configuration or {})
             for k, v in configuration_overrides.items():
                 if not isinstance(v, (str, dict)):
-                    raise ValueError('Configuration override dictionary value must be wither str or dict, '
-                                     'got {} instead'.format(type(v)))
+                    raise ValueError(
+                        f'Configuration override dictionary value must be wither str or dict, got {type(v)} instead'
+                    )
                 value = v if isinstance(v, str) else json.dumps(v)
                 if k in task_configurations:
                     task_configurations[k].value = value
@@ -518,14 +529,7 @@ class ClearmlJob(BaseJob):
                 params_override=task_params,
                 configurations_override=configuration_overrides or None,
             )
-            task = self._get_cached_task(task_hash)
-            # if we found a task, just use
-            if task:
-                if disable_clone_task and self.task and self.task.status == self.task.TaskStatusEnum.created:
-                    # if the base task at is in draft mode, and we are using cached task
-                    # we assume the base Task was created adhoc and we can delete it.
-                    pass  # self.task.delete()
-
+            if task := self._get_cached_task(task_hash):
                 self._is_cached_task = True
                 self.task = task
                 self.task_started = True
@@ -535,8 +539,8 @@ class ClearmlJob(BaseJob):
         # if we have target_project, remove project from kwargs if we have it.
         if target_project and 'project' in kwargs:
             logger.info(
-                'target_project={} and project={} passed, using target_project.'.format(
-                    target_project, kwargs['project']))
+                f"target_project={target_project} and project={kwargs['project']} passed, using target_project."
+            )
             kwargs.pop('project', None)
 
         # check again if we need to clone the Task
@@ -610,9 +614,7 @@ class LocalClearmlJob(ClearmlJob):
         if Task.current_task() and not (Path(cwd)/local_filename).is_file():
             working_dir = Task.current_task().data.script.working_dir or ''
             working_dir = working_dir.strip('.')
-            levels = 0
-            if working_dir:
-                levels = 1 + sum(1 for c in working_dir if c == '/')
+            levels = 1 + sum(1 for c in working_dir if c == '/') if working_dir else 0
             cwd = os.path.abspath(os.path.join(os.getcwd(), os.sep.join(['..'] * levels))) if levels else os.getcwd()
             cwd = os.path.join(cwd, working_dir)
 
@@ -691,7 +693,7 @@ class RunningJob(BaseJob):
         # type: (Union[Task, str]) -> None
         super(RunningJob, self).__init__()
         self.task = existing_task if isinstance(existing_task, Task) else Task.get_task(task_id=existing_task)
-        self.task_started = bool(self.task.status != Task.TaskStatusEnum.created)
+        self.task_started = self.task.status != Task.TaskStatusEnum.created
 
     def force_set_is_cached(self, cached):
         # type: (bool) -> ()
@@ -751,9 +753,7 @@ class _JobStub(object):
 
         :return: Seconds from start.
         """
-        if self.task_started is None:
-            return -1
-        return time() - self.task_started
+        return -1 if self.task_started is None else time() - self.task_started
 
     def iterations(self):
         # type: () -> int
@@ -761,9 +761,7 @@ class _JobStub(object):
         Return the last iteration value of the current job. -1 if job has not started yet
         :return: Task last iteration.
         """
-        if self.task_started is None:
-            return -1
-        return self.iteration
+        return -1 if self.task_started is None else self.iteration
 
     def get_metric(self, title, series):
         # type: (str, str) -> (float, float, float)

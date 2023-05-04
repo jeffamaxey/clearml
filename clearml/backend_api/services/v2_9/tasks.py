@@ -1230,7 +1230,7 @@ class SectionParams(dict, NonStrictDataModel):
 
     def __init__(self, *args, **kwargs):
         self.assert_isinstance(args, "section_params", dict, is_array=True)
-        kwargs.update(args)
+        kwargs |= args
         self.assert_isinstance(kwargs.values(), "params", (ParamsItem, dict), is_array=True)
         for k, v in kwargs.items():
             if isinstance(v, dict):
@@ -1854,7 +1854,10 @@ class Task(NonStrictDataModel):
         self.assert_isinstance(value, "hyperparams", dict)
         self.assert_isinstance(value.keys(), "hyperparams_keys", six.string_types, is_array=True)
         self.assert_isinstance(value.values(), "hyperparams_values", (SectionParams, dict), is_array=True)
-        value = dict((k, SectionParams(**v) if isinstance(v, dict) else v) for k, v in value.items())
+        value = {
+            k: SectionParams(**v) if isinstance(v, dict) else v
+            for k, v in value.items()
+        }
 
         self._property_hyperparams = value
 
@@ -1872,7 +1875,10 @@ class Task(NonStrictDataModel):
         self.assert_isinstance(value.keys(), "configuration_keys", six.string_types, is_array=True)
         self.assert_isinstance(value.values(), "configuration_values", (ConfigurationItem, dict), is_array=True)
 
-        value = dict((k, ConfigurationItem(**v) if isinstance(v, dict) else v) for k, v in value.items())
+        value = {
+            k: ConfigurationItem(**v) if isinstance(v, dict) else v
+            for k, v in value.items()
+        }
 
         self._property_configuration = value
 
@@ -3321,7 +3327,10 @@ class CreateRequest(Request):
         self.assert_isinstance(value, "hyperparams", dict)
         self.assert_isinstance(value.keys(), "hyperparams_keys", six.string_types, is_array=True)
         self.assert_isinstance(value.values(), "hyperparams_values", (SectionParams, dict), is_array=True)
-        value = dict((k, SectionParams(**v) if isinstance(v, dict) else v) for k, v in value.items())
+        value = {
+            k: SectionParams(**v) if isinstance(v, dict) else v
+            for k, v in value.items()
+        }
 
         self._property_hyperparams = value
 
@@ -3339,7 +3348,10 @@ class CreateRequest(Request):
         self.assert_isinstance(value.keys(), "configuration_keys", six.string_types, is_array=True)
         self.assert_isinstance(value.values(), "configuration_values", (ConfigurationItem, dict), is_array=True)
 
-        value = dict((k, ConfigurationItem(**v) if isinstance(v, dict) else v) for k, v in value.items())
+        value = {
+            k: ConfigurationItem(**v) if isinstance(v, dict) else v
+            for k, v in value.items()
+        }
 
         self._property_configuration = value
 
@@ -3719,7 +3731,10 @@ class DeleteConfigurationRequest(Request):
         self.assert_isinstance(value.keys(), "configuration_keys", six.string_types, is_array=True)
         self.assert_isinstance(value.values(), "configuration_values", (ConfigurationItem, dict), is_array=True)
 
-        value = dict((k, ConfigurationItem(**v) if isinstance(v, dict) else v) for k, v in value.items())
+        value = {
+            k: ConfigurationItem(**v) if isinstance(v, dict) else v
+            for k, v in value.items()
+        }
 
         self._property_configuration = value
 
@@ -4552,7 +4567,10 @@ class EditRequest(Request):
         self.assert_isinstance(value, "hyperparams", dict)
         self.assert_isinstance(value.keys(), "hyperparams_keys", six.string_types, is_array=True)
         self.assert_isinstance(value.values(), "hyperparams_values", (SectionParams, dict), is_array=True)
-        value = dict((k, SectionParams(**v) if isinstance(v, dict) else v) for k, v in value.items())
+        value = {
+            k: SectionParams(**v) if isinstance(v, dict) else v
+            for k, v in value.items()
+        }
 
         self._property_hyperparams = value
 
@@ -4570,7 +4588,10 @@ class EditRequest(Request):
         self.assert_isinstance(value.keys(), "configuration_keys", six.string_types, is_array=True)
         self.assert_isinstance(value.values(), "configuration_values", (ConfigurationItem, dict), is_array=True)
 
-        value = dict((k, ConfigurationItem(**v) if isinstance(v, dict) else v) for k, v in value.items())
+        value = {
+            k: ConfigurationItem(**v) if isinstance(v, dict) else v
+            for k, v in value.items()
+        }
 
         self._property_configuration = value
 
@@ -9244,7 +9265,10 @@ class ValidateRequest(Request):
         self.assert_isinstance(value, "hyperparams", dict)
         self.assert_isinstance(value.keys(), "hyperparams_keys", six.string_types, is_array=True)
         self.assert_isinstance(value.values(), "hyperparams_values", (SectionParams, dict), is_array=True)
-        value = dict((k, SectionParams(**v) if isinstance(v, dict) else v) for k, v in value.items())
+        value = {
+            k: SectionParams(**v) if isinstance(v, dict) else v
+            for k, v in value.items()
+        }
 
         self._property_hyperparams = value
 
@@ -9262,7 +9286,10 @@ class ValidateRequest(Request):
         self.assert_isinstance(value.keys(), "configuration_keys", six.string_types, is_array=True)
         self.assert_isinstance(value.values(), "configuration_values", (ConfigurationItem, dict), is_array=True)
 
-        value = dict((k, ConfigurationItem(**v) if isinstance(v, dict) else v) for k, v in value.items())
+        value = {
+            k: ConfigurationItem(**v) if isinstance(v, dict) else v
+            for k, v in value.items()
+        }
 
         self._property_configuration = value
 

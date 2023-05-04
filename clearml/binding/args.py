@@ -38,9 +38,11 @@ class PatchArgumentParser:
     def parse_args(self, args=None, namespace=None):
         if PatchArgumentParser._recursion_guard:
             return (
-                {}
-                if not PatchArgumentParser._original_parse_args
-                else PatchArgumentParser._original_parse_args(self, args=args, namespace=namespace)
+                PatchArgumentParser._original_parse_args(
+                    self, args=args, namespace=namespace
+                )
+                if PatchArgumentParser._original_parse_args
+                else {}
             )
 
         PatchArgumentParser._recursion_guard = True
@@ -50,11 +52,13 @@ class PatchArgumentParser:
             )
         except Exception as e:
             result = (
-                {}
-                if not PatchArgumentParser._original_parse_args
-                else PatchArgumentParser._original_parse_args(self, args=args, namespace=namespace)
+                PatchArgumentParser._original_parse_args(
+                    self, args=args, namespace=namespace
+                )
+                if PatchArgumentParser._original_parse_args
+                else {}
             )
-            warnings.warn("Failed patching argparse arguments: %s" % e)
+            warnings.warn(f"Failed patching argparse arguments: {e}")
         finally:
             PatchArgumentParser._recursion_guard = False
         return result
@@ -63,9 +67,11 @@ class PatchArgumentParser:
     def parse_known_args(self, args=None, namespace=None):
         if PatchArgumentParser._recursion_guard:
             return (
-                {}
-                if not PatchArgumentParser._original_parse_args
-                else PatchArgumentParser._original_parse_known_args(self, args=args, namespace=namespace)
+                PatchArgumentParser._original_parse_known_args(
+                    self, args=args, namespace=namespace
+                )
+                if PatchArgumentParser._original_parse_args
+                else {}
             )
 
         PatchArgumentParser._recursion_guard = True
@@ -75,11 +81,13 @@ class PatchArgumentParser:
             )
         except Exception as e:
             result = (
-                {}
-                if not PatchArgumentParser._original_parse_args
-                else PatchArgumentParser._original_parse_known_args(self, args=args, namespace=namespace)
+                PatchArgumentParser._original_parse_known_args(
+                    self, args=args, namespace=namespace
+                )
+                if PatchArgumentParser._original_parse_args
+                else {}
             )
-            warnings.warn("Failed patching argparse arguments: %s" % e)
+            warnings.warn(f"Failed patching argparse arguments: {e}")
         finally:
             PatchArgumentParser._recursion_guard = False
         return result
@@ -180,7 +188,11 @@ class PatchArgumentParser:
 
         # Store last instance and result
         PatchArgumentParser._add_last_arg_parser(self)
-        parsed_args = {} if not original_parse_fn else original_parse_fn(self, args=args, namespace=namespace)
+        parsed_args = (
+            original_parse_fn(self, args=args, namespace=namespace)
+            if original_parse_fn
+            else {}
+        )
         PatchArgumentParser._add_last_parsed_args(self, parsed_args)
         return parsed_args
 
@@ -216,13 +228,13 @@ class PatchArgumentParser:
     @staticmethod
     def _get_value(self, action, arg_string):
         if not hasattr(self, '_parsed_arg_string_lookup'):
-            setattr(self, '_parsed_arg_string_lookup', dict())
+            setattr(self, '_parsed_arg_string_lookup', {})
         k = str(action.dest)
         if k not in self._parsed_arg_string_lookup:
             self._parsed_arg_string_lookup[k] = arg_string
         else:
             self._parsed_arg_string_lookup[k] = \
-                (self._parsed_arg_string_lookup[k]
+                    (self._parsed_arg_string_lookup[k]
                  if isinstance(self._parsed_arg_string_lookup[k], list)
                  else [self._parsed_arg_string_lookup[k]]) + [arg_string]
         return PatchArgumentParser._original_get_value(self, action, arg_string)
@@ -250,7 +262,7 @@ def patch_argparse():
 try:
     patch_argparse()
 except Exception as e:
-    warnings.warn("Failed patching argparse: %s" % e)
+    warnings.warn(f"Failed patching argparse: {e}")
 
 
 def call_original_argparser(self, args=None, namespace=None):
@@ -291,5 +303,5 @@ def add_params_to_parser(parser, params):
 
     for param, value in params.items():
         _type, type_value = get_type_details(value)
-        parser.add_argument('--%s' % param, type=_type, default=type_value)
+        parser.add_argument(f'--{param}', type=_type, default=type_value)
     return parser

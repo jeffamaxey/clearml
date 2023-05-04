@@ -44,7 +44,9 @@ class InterfaceBase(SessionInterface):
         try:
             log.setLevel(LOG_LEVEL_ENV_VAR.get(default=log.level))
         except TypeError as ex:
-            raise ValueError('Invalid log level defined in environment variable `%s`: %s' % (LOG_LEVEL_ENV_VAR, ex))
+            raise ValueError(
+                f'Invalid log level defined in environment variable `{LOG_LEVEL_ENV_VAR}`: {ex}'
+            )
         return log
 
     @classmethod
@@ -62,20 +64,19 @@ class InterfaceBase(SessionInterface):
                     return res
 
                 if isinstance(req, BatchRequest):
-                    error_msg = 'Action failed %s' % res.meta
+                    error_msg = f'Action failed {res.meta}'
                 else:
-                    error_msg = 'Action failed %s (%s)' \
-                                % (res.meta, ', '.join('%s=%s' % p for p in req.to_dict().items()))
+                    error_msg = f"Action failed {res.meta} ({', '.join('%s=%s' % p for p in req.to_dict().items())})"
                 if log:
                     log.error(error_msg)
 
             except requests.exceptions.BaseHTTPError as e:
                 res = None
                 if log and num_retries >= cls._num_retry_warning_display:
-                    log.warning('Retrying, previous request failed %s: %s' % (str(type(req)), str(e)))
+                    log.warning(f'Retrying, previous request failed {str(type(req))}: {str(e)}')
             except MaxRequestSizeError as e:
                 res = CallResult(meta=ResponseMeta.from_raw_data(status_code=400, text=str(e)))
-                error_msg = 'Failed sending: %s' % str(e)
+                error_msg = f'Failed sending: {str(e)}'
             except requests.exceptions.ConnectionError:
                 # We couldn't send the request for more than the retries times configure in the api configuration file,
                 # so we will end the loop and raise the exception to the upper level.
@@ -89,13 +90,15 @@ class InterfaceBase(SessionInterface):
                         'Field %s contains illegal schema: %s', '.'.join(e.path), str(e.message)
                     )
                 if raise_on_errors:
-                    raise ValidationError("Field %s contains illegal schema: %s" % ('.'.join(e.path), e.message))
+                    raise ValidationError(
+                        f"Field {'.'.join(e.path)} contains illegal schema: {e.message}"
+                    )
                 # We do not want to retry
                 return None
             except Exception as e:
                 res = None
                 if log and num_retries >= cls._num_retry_warning_display:
-                    log.warning('Retrying, previous request failed %s: %s' % (str(type(req)), str(e)))
+                    log.warning(f'Retrying, previous request failed {str(type(req))}: {str(e)}')
 
             if res and res.meta.result_code <= 500:
                 # Proper backend error/bad status code - raise or return
@@ -170,12 +173,12 @@ class IdObjectBase(InterfaceBase):
 
     def reload(self):
         if not self.id and not self._offline_mode:
-            raise ValueError('Failed reloading %s: missing id' % type(self).__name__)
+            raise ValueError(f'Failed reloading {type(self).__name__}: missing id')
         # noinspection PyBroadException
         try:
             self._data = self._reload()
         except Exception:
-            self.log.error("Failed reloading task {}".format(self.id))
+            self.log.error(f"Failed reloading task {self.id}")
 
     @classmethod
     def normalize_id(cls, id):
@@ -183,6 +186,4 @@ class IdObjectBase(InterfaceBase):
 
     @classmethod
     def resolve_id(cls, obj):
-        if isinstance(obj, cls):
-            return obj.id
-        return obj
+        return obj.id if isinstance(obj, cls) else obj

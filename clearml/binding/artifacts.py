@@ -181,7 +181,7 @@ class Artifact(object):
                     self._object = pd.read_csv(local_file, index_col=[0])
             elif self.type == "image":
                 self._object = Image.open(local_file)
-            elif self.type == "JSON" or self.type == "dict":
+            elif self.type in ["JSON", "dict"]:
                 with open(local_file, "rt") as f:
                     if self.type == "JSON" or self._content_type == "application/json":
                         self._object = json.load(f)
@@ -195,9 +195,7 @@ class Artifact(object):
                     self._object = pickle.load(f)
         except Exception as e:
             LoggerRoot.get_base_logger().warning(
-                "Exception '{}' encountered when getting artifact with type {} and content type {}".format(
-                    e, self.type, self._content_type
-                )
+                f"Exception '{e}' encountered when getting artifact with type {self.type} and content type {self._content_type}"
             )
 
         local_file = Path(local_file)
@@ -227,7 +225,8 @@ class Artifact(object):
         )
         if raise_on_error and local_copy is None:
             raise ValueError(
-                "Could not retrieve a local copy of artifact {}, failed downloading {}".format(self.name, self.url))
+                f"Could not retrieve a local copy of artifact {self.name}, failed downloading {self.url}"
+            )
 
         return local_copy
 
@@ -322,7 +321,9 @@ class Artifacts(object):
         """
         # currently we support pandas.DataFrame (which we will upload as csv.gz)
         if name in self._artifacts_container:
-            LoggerRoot.get_base_logger().info('Register artifact, overwriting existing artifact \"{}\"'.format(name))
+            LoggerRoot.get_base_logger().info(
+                f'Register artifact, overwriting existing artifact \"{name}\"'
+            )
         self._artifacts_container.add_hash_columns(
             name, list(artifact.columns if uniqueness_columns is True else uniqueness_columns)
         )
@@ -852,13 +853,14 @@ class Artifacts(object):
                                 max_image_history=2)
             return
 
-        # Find our artifact
-        artifact = None
-        for an_artifact in self._task_artifact_list:
-            if an_artifact.key == name:
-                artifact = an_artifact
-                break
-
+        artifact = next(
+            (
+                an_artifact
+                for an_artifact in self._task_artifact_list
+                if an_artifact.key == name
+            ),
+            None,
+        )
         file_size = local_csv.stat().st_size
 
         # upload file
@@ -916,7 +918,7 @@ class Artifacts(object):
                 try:
                     os.unlink(local_file.as_posix())
                 except OSError:
-                    LoggerRoot.get_base_logger().warning('Failed removing temporary {}'.format(local_file))
+                    LoggerRoot.get_base_logger().warning(f'Failed removing temporary {local_file}')
         else:
             self._task._reporter._report(ev)
 

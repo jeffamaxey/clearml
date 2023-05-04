@@ -89,14 +89,14 @@ class Config(object):
         self._overrides_configs = None
 
         if self._verbose:
-            print("Config env:%s" % str(self._env))
+            print(f"Config env:{str(self._env)}")
 
         if not self._env:
             raise ValueError(
                 "Missing environment in either init of environment variable"
             )
         if self._env not in get_options(Environment):
-            raise ValueError("Invalid environment %s" % env)
+            raise ValueError(f"Invalid environment {env}")
         if relative_to is not None:
             self.load_relative_to(relative_to)
 
@@ -130,13 +130,8 @@ class Config(object):
         env = self._env
         config = self._config.copy()
 
-        if self.is_server:
-            env_config_paths = ENV_CONFIG_PATHS
-        else:
-            env_config_paths = []
-
-        env_config_path_override = ENV_CONFIG_PATH_OVERRIDE_VAR.get()
-        if env_config_path_override:
+        env_config_paths = ENV_CONFIG_PATHS if self.is_server else []
+        if env_config_path_override := ENV_CONFIG_PATH_OVERRIDE_VAR.get():
             env_config_paths = [expanduser(env_config_path_override)]
 
         # merge configuration from root and other environment config paths
@@ -162,8 +157,7 @@ class Config(object):
             )
 
         local_config_files = LOCAL_CONFIG_FILES
-        local_config_override = LOCAL_CONFIG_FILE_OVERRIDE_VAR.get()
-        if local_config_override:
+        if local_config_override := LOCAL_CONFIG_FILE_OVERRIDE_VAR.get():
             local_config_files = [expanduser(local_config_override)]
 
         # merge configuration from local configuration files
@@ -222,14 +216,10 @@ class Config(object):
             [root_logger] if root_logger else []
         )
         for logger in loggers:
-            handlers = logger.get("handlers", None)
-            if not handlers:
-                continue
-            logger["handlers"] = [h for h in handlers if h not in deleted]
+            if handlers := logger.get("handlers", None):
+                logger["handlers"] = [h for h in handlers if h not in deleted]
 
-        extra = None
-        if self._app:
-            extra = {"app": self._app}
+        extra = {"app": self._app} if self._app else None
         initialize_log(logging_config, extra=extra)
         return True
 
@@ -240,9 +230,7 @@ class Config(object):
         value = self._config.get(key, default)
         if value is self._MISSING:
             raise KeyError(
-                "Unable to find value for key '{}' and default value was not provided.".format(
-                    key
-                )
+                f"Unable to find value for key '{key}' and default value was not provided."
             )
         return value
 
@@ -278,11 +266,11 @@ class Config(object):
 
         if not conf_root.exists():
             if verbose:
-                print("No config in %s" % str(conf_root))
+                print(f"No config in {str(conf_root)}")
             return conf
 
         if verbose:
-            print("Loading config from %s" % str(conf_root))
+            print(f"Loading config from {str(conf_root)}")
         for root, dirs, files in os.walk(str(conf_root)):
 
             rel_dir = str(Path(root).relative_to(conf_root))
@@ -294,11 +282,7 @@ class Config(object):
                 if not is_config_file(filename):
                     continue
 
-                if prefix != "":
-                    key = prefix + "." + Path(filename).stem
-                else:
-                    key = Path(filename).stem
-
+                key = f"{prefix}.{Path(filename).stem}" if prefix else Path(filename).stem
                 file_path = str(Path(root) / filename)
 
                 conf.put(key, self._read_single_file(file_path, verbose=verbose))
@@ -311,13 +295,13 @@ class Config(object):
             return ConfigTree()
 
         if verbose:
-            print("Loading config from file %s" % file_path)
+            print(f"Loading config from file {file_path}")
 
         try:
             return ConfigFactory.parse_file(file_path)
         except ParseSyntaxException as ex:
             msg = "Failed parsing {0} ({1.__class__.__name__}): " \
-                  "(at char {1.loc}, line:{1.lineno}, col:{1.column})".format(file_path, ex)
+                      "(at char {1.loc}, line:{1.lineno}, col:{1.column})".format(file_path, ex)
             six.reraise(
                 ConfigurationError,
                 ConfigurationError(msg, file_path=file_path),
@@ -329,7 +313,7 @@ class Config(object):
             )
             six.reraise(ConfigurationError, ConfigurationError(msg), sys.exc_info()[2])
         except Exception as ex:
-            print("Failed loading %s: %s" % (file_path, ex))
+            print(f"Failed loading {file_path}: {ex}")
             raise
 
     def get_config_for_bucket(self, base_url, extra_configurations=None):

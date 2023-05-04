@@ -29,11 +29,10 @@ class Min(object):
                 tpl = "'{value}' is lower or equal than minimum ('{min}')."
                 raise ValidationError(
                     tpl.format(value=value, min=self.minimum_value))
-        else:
-            if value < self.minimum_value:
-                raise ValidationError(
-                    "'{value}' is lower than minimum ('{min}').".format(
-                        value=value, min=self.minimum_value))
+        elif value < self.minimum_value:
+            raise ValidationError(
+                "'{value}' is lower than minimum ('{min}').".format(
+                    value=value, min=self.minimum_value))
 
     def modify_schema(self, field_schema):
         """Modify field schema."""
@@ -64,11 +63,10 @@ class Max(object):
                 tpl = "'{val}' is bigger or equal than maximum ('{max}')."
                 raise ValidationError(
                     tpl.format(val=value, max=self.maximum_value))
-        else:
-            if value > self.maximum_value:
-                raise ValidationError(
-                    "'{value}' is bigger than maximum ('{max}').".format(
-                        value=value, max=self.maximum_value))
+        elif value > self.maximum_value:
+            raise ValidationError(
+                "'{value}' is bigger than maximum ('{max}').".format(
+                    value=value, max=self.maximum_value))
 
     def modify_schema(self, field_schema):
         """Modify field schema."""

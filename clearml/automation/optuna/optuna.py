@@ -79,7 +79,9 @@ class OptunaObjective(object):
 
         # noinspection PyProtectedMember
         objective_metric = self.optimizer._objective_metric.get_objective(current_job)
-        print('OptunaObjective result metric={}, iteration {}'.format(objective_metric, iteration_value))
+        print(
+            f'OptunaObjective result metric={objective_metric}, iteration {iteration_value}'
+        )
         # noinspection PyProtectedMember
         self.optimizer._current_jobs.remove(current_job)
         return objective_metric
@@ -142,7 +144,9 @@ class OptimizerOptuna(SearchStrategy):
         self._optuna_sampler = optuna_sampler
         self._optuna_pruner = optuna_pruner
         verified_optuna_kwargs = []
-        self._optuna_kwargs = dict((k, v) for k, v in optuna_kwargs.items() if k in verified_optuna_kwargs)
+        self._optuna_kwargs = {
+            k: v for k, v in optuna_kwargs.items() if k in verified_optuna_kwargs
+        }
         self._param_iterator = None
         self._objective = None
         self._study = continue_previous_study if continue_previous_study else None
@@ -212,7 +216,9 @@ class OptimizerOptuna(SearchStrategy):
                 hp_type = 'suggest_categorical'
                 hp_params = dict(choices=p.values)
             else:
-                raise ValueError("HyperParameter type {} not supported yet with OptimizerBOHB".format(type(p)))
+                raise ValueError(
+                    f"HyperParameter type {type(p)} not supported yet with OptimizerBOHB"
+                )
             cs[p.name] = (hp_type, hp_params)
 
         return cs

@@ -43,7 +43,9 @@ class Metrics(InterfaceBase):
             storage_uri = storage_uri or self._storage_uri
             return StorageHelper.get(storage_uri)
         except Exception as e:
-            self._get_logger().error('Failed getting storage helper for %s: %s' % (storage_uri, str(e)))
+            self._get_logger().error(
+                f'Failed getting storage helper for {storage_uri}: {str(e)}'
+            )
         finally:
             self._storage_lock.release()
 
@@ -104,10 +106,10 @@ class Metrics(InterfaceBase):
             return
         elif isinstance(res, Exception):
             # error
-            self.log.error('Error trying to send metrics: %s' % str(res))
+            self.log.error(f'Error trying to send metrics: {str(res)}')
         elif not res.ok():
             # bad result, log error
-            self.log.error('Failed reporting metrics: %s' % str(res.meta))
+            self.log.error(f'Failed reporting metrics: {str(res.meta)}')
         # call callback, even if we received an error
         if callback:
             callback(res)
@@ -141,7 +143,7 @@ class Metrics(InterfaceBase):
                     entry = None
                 else:
                     if not isinstance(entry.stream, Path) and not hasattr(entry.stream, 'read'):
-                        raise ValueError('Invalid file object %s' % entry.stream)
+                        raise ValueError(f'Invalid file object {entry.stream}')
                     entry.url = url
             ev.update(task=self._task_id, iter_offset=self._task_iteration_offset, **kwargs)
             return entry
@@ -195,7 +197,7 @@ class Metrics(InterfaceBase):
             self._file_upload_time = time()
 
         t_f, t_u, t_ref = \
-            (self._file_related_event_time, self._file_upload_time, self._file_upload_starvation_warning_sec)
+                (self._file_related_event_time, self._file_upload_time, self._file_upload_starvation_warning_sec)
         if t_f and t_u and t_ref and (t_f - t_u) > t_ref:
             self._get_logger().warning(
                 'Possible metrics file upload starvation: '
@@ -287,8 +289,9 @@ class Metrics(InterfaceBase):
                         if r.get('key') and r.get('url'):
                             debug_sample = (Path(folder) / 'data').joinpath(*(r['key'].split('/')))
                             r['key'] = r['key'].replace(
-                                '.{}{}'.format(org_task_id, os.sep), '.{}{}'.format(task_id, os.sep), 1)
-                            r['url'] = '{}/{}'.format(remote_url, r['key'])
+                                f'.{org_task_id}{os.sep}', f'.{task_id}{os.sep}', 1
+                            )
+                            r['url'] = f"{remote_url}/{r['key']}"
                             if debug_sample not in uploaded_files and debug_sample.is_file():
                                 uploaded_files.add(debug_sample)
                                 StorageManager.upload_file(local_file=debug_sample.as_posix(), remote_url=r['url'])
@@ -296,7 +299,7 @@ class Metrics(InterfaceBase):
                             # hack plotly embedded images links
                             # noinspection PyBroadException
                             try:
-                                task_id_sep = '.{}{}'.format(org_task_id, os.sep)
+                                task_id_sep = f'.{org_task_id}{os.sep}'
                                 plot = json.loads(r['plot_str'])
                                 if plot.get('layout', {}).get('images'):
                                     for image in plot['layout']['images']:
@@ -304,10 +307,8 @@ class Metrics(InterfaceBase):
                                             continue
                                         pre, post = image['source'].split(task_id_sep, 1)
                                         pre = os.sep.join(pre.split(os.sep)[-2:])
-                                        debug_sample = (Path(folder) / 'data').joinpath(
-                                            pre+'.{}'.format(org_task_id), post)
-                                        image['source'] = '/'.join(
-                                            [remote_url, pre + '.{}'.format(task_id), post])
+                                        debug_sample = (Path(folder) / 'data').joinpath(f'{pre}.{org_task_id}', post)
+                                        image['source'] = '/'.join([remote_url, f'{pre}.{task_id}', post])
                                         if debug_sample not in uploaded_files and debug_sample.is_file():
                                             uploaded_files.add(debug_sample)
                                             StorageManager.upload_file(
@@ -319,7 +320,7 @@ class Metrics(InterfaceBase):
                 except StopIteration:
                     break
                 except Exception as ex:
-                    warning('Failed reporting metric, line {} [{}]'.format(i, ex))
+                    warning(f'Failed reporting metric, line {i} [{ex}]')
                 batch_requests = api_events.AddBatchRequest(requests=list_requests)
                 if batch_requests.requests:
                     res = task.session.send(batch_requests)

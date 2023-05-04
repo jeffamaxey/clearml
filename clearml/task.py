@@ -569,7 +569,6 @@ class Task(_Task):
                     is_deferred = True
                     # mark as temp master
                     cls.__update_master_pid_task()
-                # if this is the main process, create the task
                 elif not is_sub_process_task_id:
                     task = cls._create_dev_task(
                         default_project_name=project_name,
@@ -578,9 +577,12 @@ class Task(_Task):
                         tags=tags,
                         reuse_last_task_id=reuse_last_task_id,
                         continue_last_task=continue_last_task,
-                        detect_repo=False if (
-                                isinstance(auto_connect_frameworks, dict) and
-                                not auto_connect_frameworks.get('detect_repository', True)) else True,
+                        detect_repo=bool(
+                            not isinstance(auto_connect_frameworks, dict)
+                            or auto_connect_frameworks.get(
+                                'detect_repository', True
+                            )
+                        ),
                         auto_connect_streams=auto_connect_streams,
                     )
                     # set defaults
@@ -698,7 +700,7 @@ class Task(_Task):
 
             if auto_resource_monitoring and not is_sub_process_task_id:
                 resource_monitor_cls = auto_resource_monitoring \
-                    if isinstance(auto_resource_monitoring, six.class_types) else ResourceMonitor
+                        if isinstance(auto_resource_monitoring, six.class_types) else ResourceMonitor
                 task._resource_monitor = resource_monitor_cls(
                     task, report_mem_used_per_process=not config.get(
                         'development.worker.report_global_mem_used', False))
@@ -746,7 +748,7 @@ class Task(_Task):
         task._dev_mode_setup_worker()
 
         if (not task._reporter or not task._reporter.is_constructed()) and \
-                is_sub_process_task_id and not cls._report_subprocess_enabled:
+                    is_sub_process_task_id and not cls._report_subprocess_enabled:
             task._setup_reporter()
 
         # start monitoring in background process or background threads
@@ -1033,10 +1035,22 @@ class Task(_Task):
             task_filter['only_fields'] = (task_filter.get('only_fields') or []) + list(return_fields)
 
         results = cls._query_tasks(project_name=project_name, task_name=task_name, **(task_filter or {}))
-        return [t.id for t in results] if not additional_return_fields else \
-            [{k: cls._get_data_property(prop_path=k, data=r, raise_on_error=False, log_on_error=False)
-              for k in return_fields}
-             for r in results]
+        return (
+            [
+                {
+                    k: cls._get_data_property(
+                        prop_path=k,
+                        data=r,
+                        raise_on_error=False,
+                        log_on_error=False,
+                    )
+                    for k in return_fields
+                }
+                for r in results
+            ]
+            if additional_return_fields
+            else [t.id for t in results]
+        )
 
     @property
     def output_uri(self):
@@ -1056,11 +1070,12 @@ class Task(_Task):
         # check if we have the correct packages / configuration
         if value and value != self.storage_uri:
             from .storage.helper import StorageHelper
-            helper = StorageHelper.get(value)
-            if not helper:
-                raise ValueError("Could not get access credentials for '{}' "
-                                 ", check configuration file ~/clearml.conf".format(value))
-            helper.check_write_permissions(value)
+            if helper := StorageHelper.get(value):
+                helper.check_write_permissions(value)
+            else:
+                raise ValueError(
+                    f"Could not get access credentials for '{value}' , check configuration file ~/clearml.conf"
+                )
         self.storage_uri = value
 
     @property
@@ -1165,14 +1180,13 @@ class Task(_Task):
         if not parent:
             if isinstance(source_task, six.string_types):
                 source_task = cls.get_task(task_id=source_task)
-            parent = source_task.id if not source_task.parent else source_task.parent
+            parent = source_task.parent if source_task.parent else source_task.id
         elif isinstance(parent, Task):
             parent = parent.id
 
         cloned_task_id = cls._clone_task(cloned_task_id=task_id, name=name, comment=comment,
                                          parent=parent, project=project)
-        cloned_task = cls.get_task(task_id=cloned_task_id)
-        return cloned_task
+        return cls.get_task(task_id=cloned_task_id)
 
     @classmethod
     def enqueue(cls, task, queue_name=None, queue_id=None):
@@ -1231,15 +1245,14 @@ class Task(_Task):
         session = cls._get_default_session()
         if not queue_id:
             queue_id = get_queue_id(session, queue_name)
-            if not queue_id:
-                raise ValueError('Could not find queue named "{}"'.format(queue_name))
+        if not queue_id:
+            raise ValueError(f'Could not find queue named "{queue_name}"')
 
         req = tasks.EnqueueRequest(task=task_id, queue=queue_id)
         res = cls._send(session=session, req=req)
         if not res.ok():
             raise ValueError(res.response)
-        resp = res.response
-        return resp
+        return res.response
 
     @classmethod
     def dequeue(cls, task):
@@ -1289,8 +1302,7 @@ class Task(_Task):
         session = cls._get_default_session()
         req = tasks.DequeueRequest(task=task_id)
         res = cls._send(session=session, req=req)
-        resp = res.response
-        return resp
+        return res.response
 
     def set_progress(self, progress):
         # type: (int) -> ()
@@ -1301,7 +1313,9 @@ class Task(_Task):
         :param progress: numeric value (0 - 100)
         """
         if not isinstance(progress, int) or progress < 0 or progress > 100:
-            self.log.warning("Can't set progress {} as it is not and int between 0 and 100".format(progress))
+            self.log.warning(
+                f"Can't set progress {progress} as it is not and int between 0 and 100"
+            )
             return
         self._set_runtime_properties({"progress": str(progress)})
 
@@ -1379,7 +1393,9 @@ class Task(_Task):
             if isinstance(mutable, mutable_type):
                 return method(mutable, name=name)
 
-        raise Exception('Unsupported mutable type %s: no connect function found' % type(mutable).__name__)
+        raise Exception(
+            f'Unsupported mutable type {type(mutable).__name__}: no connect function found'
+        )
 
     def connect_configuration(self, configuration, name=None, description=None):
         # type: (Union[Mapping, list, Path, str], Optional[str], Optional[str]) -> Union[dict, Path, str]
@@ -1559,8 +1575,9 @@ class Task(_Task):
         :return: The label enumeration dictionary (JSON).
         """
         if not isinstance(enumeration, dict):
-            raise ValueError("connect_label_enumeration supports only `dict` type, "
-                             "{} is not supported".format(type(enumeration)))
+            raise ValueError(
+                f"connect_label_enumeration supports only `dict` type, {type(enumeration)} is not supported"
+            )
 
         if not running_remotely() or not (self.is_main_task() or self._is_remote_main_task()):
             self.set_model_label_enumeration(enumeration)
@@ -2002,7 +2019,7 @@ class Task(_Task):
         """
         self.reload()
         metrics = self.data.last_metrics
-        scalar_metrics = dict()
+        scalar_metrics = {}
         for i in metrics.values():
             for j in i.values():
                 scalar_metrics.setdefault(j['metric'], {}).setdefault(
@@ -2295,8 +2312,7 @@ class Task(_Task):
 
         if not self.is_main_task():
             LoggerRoot.get_base_logger().warning(
-                "Calling task.execute_remotely is only supported on main Task (created with Task.init)\n"
-                "Defaulting to self.enqueue(queue_name={})".format(queue_name)
+                f"Calling task.execute_remotely is only supported on main Task (created with Task.init)\nDefaulting to self.enqueue(queue_name={queue_name})"
             )
             if not queue_name:
                 raise ValueError("queue_name must be provided")
@@ -2309,7 +2325,6 @@ class Task(_Task):
                 "clone==False and exit_process==False is not supported. "
                 "Task enqueuing itself must exit the process afterwards.")
 
-        # make sure we analyze the process
         if self.status in (Task.TaskStatusEnum.in_progress,):
             if clone:
                 # wait for repository detection (5 minutes should be reasonable time to detect all packages)
@@ -2335,7 +2350,8 @@ class Task(_Task):
         if queue_name:
             Task.enqueue(task, queue_name=queue_name)
             LoggerRoot.get_base_logger().warning(
-                'Switching to remote execution, output log page {}'.format(task.get_output_log_web_page()))
+                f'Switching to remote execution, output log page {task.get_output_log_web_page()}'
+            )
         else:
             # Remove the development system tag
             system_tags = [t for t in task.get_system_tags() if t != self._development_tag]
@@ -2386,11 +2402,11 @@ class Task(_Task):
 
         func_name = str(func_name or func.__name__).strip()
         if func_name in self._remote_functions_generated:
-            raise ValueError("Function name must be unique, a function by the name '{}' "
-                             "was already created by this Task.".format(func_name))
+            raise ValueError(
+                f"Function name must be unique, a function by the name '{func_name}' was already created by this Task."
+            )
 
         section_name = 'Function'
-        tag_name = 'func'
         func_marker = '__func_readonly__'
 
         # sanitize the dict, leave only basic types that we might want to override later in the UI
@@ -2398,7 +2414,9 @@ class Task(_Task):
         func_params[func_marker] = func_name
 
         # do not query if we are running locally, there is no need.
-        task_func_marker = self.running_locally() or self.get_parameter('{}/{}'.format(section_name, func_marker))
+        task_func_marker = self.running_locally() or self.get_parameter(
+            f'{section_name}/{func_marker}'
+        )
 
         # if we are running locally or if we are running remotely but we are not a forked tasks
         # condition explained:
@@ -2406,7 +2424,12 @@ class Task(_Task):
         # (2) running remotely but this is not one of the forked tasks (i.e. it is missing the fork tag attribute)
         if self.running_locally() or not task_func_marker:
             self._wait_for_repo_detection(300)
-            task = self.clone(self, name=task_name or '{} <{}>'.format(self.name, func_name), parent=self.id)
+            task = self.clone(
+                self,
+                name=task_name or f'{self.name} <{func_name}>',
+                parent=self.id,
+            )
+            tag_name = 'func'
             task.set_system_tags((task.get_system_tags() or []) + [tag_name])
             task.connect(func_params, name=section_name)
             self._remote_functions_generated[func_name] = task.id
@@ -2424,7 +2447,7 @@ class Task(_Task):
         # this is us for sure, let's update the arguments and call the function
         self.connect(func_params, name=section_name)
         func_params.pop(func_marker, None)
-        kwargs.update(func_params)
+        kwargs |= func_params
         func(**kwargs)
         # This is it, leave the process
         leave_process(0)
@@ -2451,7 +2474,7 @@ class Task(_Task):
             time.sleep(check_interval_sec)
 
         if raise_on_status and self.status in raise_on_status:
-            raise RuntimeError("Task {} has status: {}.".format(self.task_id, self.status))
+            raise RuntimeError(f"Task {self.task_id} has status: {self.status}.")
 
         # make sure we have the Task object
         self.reload()
@@ -2517,8 +2540,8 @@ class Task(_Task):
             target_task = Task.get_task(task_id=target_task)
         elif not isinstance(target_task, Task):
             raise ValueError(
-                "`target_task` must be either Task id (str) or Task object, "
-                "received `target_task` type {}".format(type(target_task)))
+                f"`target_task` must be either Task id (str) or Task object, received `target_task` type {type(target_task)}"
+            )
         target_task.reload()
         cur_data = target_task.data.to_dict()
         cur_data = merge_dicts(cur_data, task_data) if update else dict(**task_data)
@@ -2526,7 +2549,7 @@ class Task(_Task):
         cur_data.pop('project', None)
         # noinspection PyProtectedMember
         valid_fields = list(tasks.EditRequest._get_data_props().keys())
-        cur_data = dict((k, cur_data[k]) for k in valid_fields if k in cur_data)
+        cur_data = {k: cur_data[k] for k in valid_fields if k in cur_data}
         res = target_task._edit(**cur_data)
         if res and res.ok():
             target_task.reload()
@@ -2557,7 +2580,7 @@ class Task(_Task):
 
         :return: Newly created task ID or the ID of the continued task (previous_task_id)
         """
-        print('ClearML: Importing offline session from {}'.format(session_folder_zip))
+        print(f'ClearML: Importing offline session from {session_folder_zip}')
 
         temp_folder = None
         if Path(session_folder_zip).is_file():
@@ -2568,14 +2591,17 @@ class Task(_Task):
 
         session_folder = Path(session_folder_zip)
         if not session_folder.is_dir():
-            raise ValueError("Could not find the session folder / zip-file {}".format(session_folder))
+            raise ValueError(
+                f"Could not find the session folder / zip-file {session_folder}"
+            )
 
         try:
             with open((session_folder / cls._offline_filename).as_posix(), 'rt') as f:
                 export_data = json.load(f)
         except Exception as ex:
             raise ValueError(
-                "Could not read Task object {}: Exception {}".format(session_folder / cls._offline_filename, ex))
+                f"Could not read Task object {session_folder / cls._offline_filename}: Exception {ex}"
+            )
         current_task = cls.import_task(export_data)
         if previous_task_id:
             task_holding_reports = cls.get_task(task_id=previous_task_id)
@@ -2600,8 +2626,11 @@ class Task(_Task):
                 local_file = session_folder / 'data' / local_path
                 if local_file.is_file():
                     remote_path = local_path.replace(
-                        '.{}{}'.format(export_data['id'], os.sep), '.{}{}'.format(current_task.id, os.sep), 1)
-                    artifact.uri = '{}/{}'.format(remote_url, remote_path)
+                        f".{export_data['id']}{os.sep}",
+                        f'.{current_task.id}{os.sep}',
+                        1,
+                    )
+                    artifact.uri = f'{remote_url}/{remote_path}'
                     StorageManager.upload_file(local_file=local_file.as_posix(), remote_url=artifact.uri)
             # noinspection PyProtectedMember
             task_holding_reports._edit(execution=current_task.data.execution)
@@ -2610,7 +2639,9 @@ class Task(_Task):
         # metrics
         Metrics.report_offline_session(task_holding_reports, session_folder, iteration_offset=iteration_offset)
         # print imported results page
-        print('ClearML results page: {}'.format(task_holding_reports.get_output_log_web_page()))
+        print(
+            f'ClearML results page: {task_holding_reports.get_output_log_web_page()}'
+        )
         task_holding_reports.mark_completed()
         # close task
         task_holding_reports.close()
@@ -2686,11 +2717,10 @@ class Task(_Task):
                 ENV_SECRET_KEY.set(secret)
 
         if store_conf_file and not running_remotely():
-            active_conf_file = get_active_config_file()
-            if active_conf_file:
+            if active_conf_file := get_active_config_file():
                 getLogger().warning(
-                    'Could not store credentials in configuration file, '
-                    '\'{}\' already exists'.format(active_conf_file))
+                    f"Could not store credentials in configuration file, \'{active_conf_file}\' already exists"
+                )
             else:
                 conf = {'api': dict(
                     api_server=Session.default_host,
@@ -2723,7 +2753,7 @@ class Task(_Task):
         # verify Task ID exists
         task = Task.get_task(task_id=task_id)
         if not task:
-            raise ValueError("Task ID '{}' could not be found".format(task_id))
+            raise ValueError(f"Task ID '{task_id}' could not be found")
 
         if reset_task:
             task.reset(set_started_on_success=False, force=True)
@@ -2827,19 +2857,19 @@ class Task(_Task):
         if not default_project_name or not default_task_name:
             # get project name and task name from repository name and entry_point
             result, _ = ScriptInfo.get(create_requirements=False, check_uncommitted=False)
-            if not default_project_name:
-                # noinspection PyBroadException
-                try:
-                    parts = result.script['repository'].split('/')
-                    default_project_name = (parts[-1] or parts[-2]).replace('.git', '') or 'Untitled'
-                except Exception:
-                    default_project_name = 'Untitled'
-            if not default_task_name:
-                # noinspection PyBroadException
-                try:
-                    default_task_name = os.path.splitext(os.path.basename(result.script['entry_point']))[0]
-                except Exception:
-                    pass
+        if not default_project_name:
+            # noinspection PyBroadException
+            try:
+                parts = result.script['repository'].split('/')
+                default_project_name = (parts[-1] or parts[-2]).replace('.git', '') or 'Untitled'
+            except Exception:
+                default_project_name = 'Untitled'
+        if not default_task_name:
+            # noinspection PyBroadException
+            try:
+                default_task_name = os.path.splitext(os.path.basename(result.script['entry_point']))[0]
+            except Exception:
+                pass
 
         # conform reuse_last_task_id and continue_last_task
         if continue_last_task and isinstance(continue_last_task, str):
@@ -2863,7 +2893,6 @@ class Task(_Task):
                 default_task_type.value,
             )
 
-        closed_old_task = False
         default_task_id = None
         task = None
         in_dev_mode = not running_remotely()
@@ -2886,7 +2915,7 @@ class Task(_Task):
 
                     # instead of resting the previously used task we are continuing the training with it.
                     if task and \
-                            (continue_last_task or
+                                (continue_last_task or
                              (isinstance(continue_last_task, int) and not isinstance(continue_last_task, bool))):
                         task.reload()
                         task.mark_started(force=True)
@@ -2899,7 +2928,7 @@ class Task(_Task):
                     else:
                         task_tags = task.data.system_tags if hasattr(task.data, 'system_tags') else task.data.tags
                         task_artifacts = task.data.execution.artifacts \
-                            if hasattr(task.data.execution, 'artifacts') else None
+                                if hasattr(task.data.execution, 'artifacts') else None
                         if ((str(task._status) in (
                                 str(tasks.TaskStatusEnum.published), str(tasks.TaskStatusEnum.closed)))
                                 or task.output_models_id or (cls.archived_tag in task_tags)
@@ -2922,7 +2951,7 @@ class Task(_Task):
                                     system_tags=[cls._development_tag],
                                     comment=make_message('Auto-generated at %(time)s by %(user)s@%(host)s'))
 
-                except (Exception, ValueError):
+                except Exception:
                     # we failed reusing task, create a new one
                     default_task_id = None
 
@@ -2960,16 +2989,20 @@ class Task(_Task):
 
         # force update of base logger to this current task (this is the main logger task)
         logger = task._get_logger(auto_connect_streams=auto_connect_streams)
+        closed_old_task = False
         if closed_old_task:
-            logger.report_text('ClearML Task: Closing old development task id={}'.format(default_task.get('id')))
+            logger.report_text(
+                f"ClearML Task: Closing old development task id={default_task.get('id')}"
+            )
         # print warning, reusing/creating a task
         if default_task_id and not continue_last_task:
-            logger.report_text('ClearML Task: overwriting (reusing) task id=%s' % task.id)
-        elif default_task_id and continue_last_task:
-            logger.report_text('ClearML Task: continuing previous task id=%s '
-                               'Notice this run will not be reproducible!' % task.id)
+            logger.report_text(f'ClearML Task: overwriting (reusing) task id={task.id}')
+        elif default_task_id:
+            logger.report_text(
+                f'ClearML Task: continuing previous task id={task.id} Notice this run will not be reproducible!'
+            )
         else:
-            logger.report_text('ClearML Task: created new task id=%s' % task.id)
+            logger.report_text(f'ClearML Task: created new task id={task.id}')
 
         # update current repository and put warning into logs
         if detect_repo:
@@ -3075,7 +3108,7 @@ class Task(_Task):
         comment = self.comment or ''
         if not comment.endswith('\n'):
             comment += '\n'
-        comment += 'Using model id: {}'.format(model.id)
+        comment += f'Using model id: {model.id}'
         self.set_comment(comment)
 
         model.connect(self, name)
@@ -3151,7 +3184,12 @@ class Task(_Task):
                 attr_class.update_from_dict(parameters)
             else:
                 attr_class.update_from_dict(
-                    dict((k[len(name) + 1:], v) for k, v in parameters.items() if k.startswith('{}/'.format(name))))
+                    {
+                        k[len(name) + 1 :]: v
+                        for k, v in parameters.items()
+                        if k.startswith(f'{name}/')
+                    }
+                )
         else:
             self.set_parameters(attr_class.to_dict(), __parameters_prefix=name)
         return attr_class
@@ -3190,9 +3228,7 @@ class Task(_Task):
             return
 
         self.log.warning(
-            "### TASK STOPPED - USER ABORTED - {} ###".format(
-                stop_reason.upper().replace('_', ' ')
-            )
+            f"### TASK STOPPED - USER ABORTED - {stop_reason.upper().replace('_', ' ')} ###"
         )
         self.flush(wait_for_uploads=True)
         self.stopped(status_reason='USER ABORTED')
@@ -3278,8 +3314,9 @@ class Task(_Task):
                         self._detect_repo_async_thread.join(timeout=timeout)
                         # because join has no return value
                         if self._detect_repo_async_thread.is_alive():
-                            self.log.info('Repository and package analysis timed out ({} sec), '
-                                          'giving up'.format(timeout))
+                            self.log.info(
+                                f'Repository and package analysis timed out ({timeout} sec), giving up'
+                            )
                             # done waiting, kill the thread
                             from .utilities.lowlevel.threads import kill_thread
                             kill_thread(self._detect_repo_async_thread)

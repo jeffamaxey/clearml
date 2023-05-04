@@ -49,8 +49,7 @@ class Service(object):
 
     @classmethod
     def get_ref_name(cls, ref_string):
-        m = cls.__jsonschema_ref_ex.match(ref_string)
-        if m:
+        if m := cls.__jsonschema_ref_ex.match(ref_string):
             return m.group(1)
 
     def parse(self, service_config):
@@ -58,10 +57,9 @@ class Service(object):
             "_default", ConfigTree()
         ).as_plain_ordered_dict()
 
-        self._doc = '{} service'.format(self.name)
-        description = service_config.get('_description', '')
-        if description:
-            self._doc += '\n\n{}'.format(description)
+        self._doc = f'{self.name} service'
+        if description := service_config.get('_description', ''):
+            self._doc += f'\n\n{description}'
         self._definitions = service_config.get(
             "_definitions", ConfigTree()
         ).as_plain_ordered_dict()
@@ -71,8 +69,7 @@ class Service(object):
         all_refs = set(itertools.chain(*self.definitions_refs.values()))
         if not all_refs.issubset(self.definitions):
             raise ValueError(
-                "Unresolved references (%s) in %s/definitions"
-                % (", ".join(all_refs.difference(self.definitions)), self.name)
+                f'Unresolved references ({", ".join(all_refs.difference(self.definitions))}) in {self.name}/definitions'
             )
 
         actions = {
@@ -123,8 +120,7 @@ class Service(object):
         if isinstance(s, dict):
             for k, v in s.items():
                 if isinstance(v, six.string_types):
-                    m = self.__jsonschema_ref_ex.match(v)
-                    if m:
+                    if m := self.__jsonschema_ref_ex.match(v):
                         refs.add(m.group(1))
                     continue
                 elif k in ("oneOf", "anyOf") and isinstance(v, list):
@@ -140,8 +136,7 @@ class Service(object):
             return required_refs
         if not required_refs.issubset(self.definitions):
             raise ValueError(
-                "Unresolved references (%s)"
-                % ", ".join(required_refs.difference(self.definitions))
+                f'Unresolved references ({", ".join(required_refs.difference(self.definitions))})'
             )
 
         # update required refs with all sub requirements
@@ -183,7 +178,7 @@ class Service(object):
                         action_version,
                         schema_key,
                     )
-                    raise ValueError("%s in %s" % (str(ex), name))
+                    raise ValueError(f"{str(ex)} in {name}")
 
         return Action(
             name=action_name,

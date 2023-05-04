@@ -25,7 +25,7 @@ class AccessMixin(object):
         props = prop_path.split('.')
         for i in range(len(props)):
             if not hasattr(obj, props[i]) and (not isinstance(obj, dict) or props[i] not in obj):
-                msg = 'Task has no %s section defined' % '.'.join(props[:i + 1])
+                msg = f"Task has no {'.'.join(props[:i + 1])} section defined"
                 if log_on_error and log:
                     log.info(msg)
                 if raise_on_error:
@@ -64,7 +64,7 @@ class AccessMixin(object):
         if not design:
             raise ValueError('Task has no design in execution.model_desc')
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text('%s' % design)
+        p.write_text(f'{design}')
         return str(p)
 
     def get_parameters(self):
@@ -78,7 +78,7 @@ class AccessMixin(object):
         label_getter = operator.itemgetter(0)
         num_getter = operator.itemgetter(1)
         groups = list(itertools.groupby(sorted(model_labels.items(), key=num_getter), key=num_getter))
-        if any(len(set(label_getter(x) for x in group)) > 1 for _, group in groups):
+        if any(len({label_getter(x) for x in group}) > 1 for _, group in groups):
             raise ValueError("Multiple labels mapped to same model index not supported")
         return {key: ','.join(label_getter(x) for x in group) for key, group in groups}
 
@@ -89,9 +89,9 @@ class AccessMixin(object):
     def get_num_of_classes(self):
         """ number of classes based on the task's labels """
         model_labels = self.data.execution.model_labels
-        expected_num_of_classes = 0
-        for labels, index in model_labels.items():
-            expected_num_of_classes += 1 if int(index) > 0 else 0
+        expected_num_of_classes = sum(
+            1 if int(index) > 0 else 0 for labels, index in model_labels.items()
+        )
         num_of_classes = int(max(model_labels.values()))
         if num_of_classes != expected_num_of_classes:
             self.log.warning('The highest label index is %d, while there are %d non-bg labels' %
